@@ -1,0 +1,293 @@
+Part A: Update product_card.dart to be Tappable
+First, we need to modify our ProductCard widget so it can do something when a user taps on it. We'll pass it a function (a VoidCallback) called onTap.
+lib/widgets/product_card.dart - Part 1: Imports & Class Definition
+Let's update the class constructor to accept the new onTap function.
+
+import 'package:flutter/material.dart';
+
+class ProductCard extends StatelessWidget {
+  
+  final String productName;
+  final double price;
+  final String imageUrl;
+  final VoidCallback onTap; // 1. ADD THIS LINE
+
+  const ProductCard({
+    super.key,
+    required this.productName,
+    required this.price,
+    required this.imageUrl,
+    required this.onTap, // 2. ADD THIS TO THE CONSTRUCTOR
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // ... build method is next
+
+
+1.	final VoidCallback onTap;: A VoidCallback is just a simple, empty function: () {}. We are telling our ProductCard that it must be given a function to call when it's tapped.
+2.	required this.onTap: We add this to the constructor to make it a required parameter.
+
+lib/widgets/product_card.dart - Part 2: The build Method
+Now, let's wrap our Card in a widget that can detect taps. The InkWell widget is perfect for this, as it also gives a nice "ripple" effect.
+
+ @override
+  Widget build(BuildContext context) {
+    // 1. Wrap the Card in an InkWell widget
+    return InkWell(
+      onTap: onTap, // 2. Call the function we passed in
+      child: Card(
+        elevation: 3,
+        child: Column(
+          // 3. The rest of your Column code is UNCHANGED
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ... (Expanded Image.network, Padding, Text, etc.)
+          ],
+        ),
+      ),
+    );
+  }
+
+
+
+1.	InkWell: This widget makes its child (the Card) tappable.
+2.	onTap: onTap: We connect the InkWell's tap event to the onTap function that was passed into our ProductCard's constructor.
+
+Part B: Create the product_detail_screen.dart File
+This is the new screen that will show all the details.
+Step 1: Create the file
+●	In your lib/screens folder, create a new file: product_detail_screen.dart.
+lib/screens/product_detail_screen.dart - Part 1: Imports & Class Definition
+
+import 'package:flutter/material.dart';
+
+// 1. This is a new StatelessWidget
+class ProductDetailScreen extends StatelessWidget {
+  
+  // 2. We will pass in the product's data (the map)
+  final Map<String, dynamic> productData;
+  // 3. We'll also pass the unique product ID (critical for 'Add to Cart' later)
+  final String productId;
+
+  // 4. The constructor takes both parameters
+  const ProductDetailScreen({
+    super.key,
+    required this.productData,
+    required this.productId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // The UI will go here next
+    return Container(); // Placeholder
+  }
+}
+1.	ProductDetailScreen: This is a StatelessWidget because it just displays data. It doesn't need to manage any internal state.
+2.	productData: This Map holds all the product info (name, description, price, imageUrl).
+3.	productId: This String is the unique Document ID from Firestore (e.g., aBcXyZ...). We will need this in the next module to know which product to add to the cart.
+4.	const ProductDetailScreen(...): The constructor requires both pieces of data.
+
+lib/screens/product_detail_screen.dart - Part 2: The build Method (UI)
+Now, let's build the UI. Replace the return Container(); with this:
+
+ @override
+  Widget build(BuildContext context) {
+    
+    // 1. Extract data from the map for easier use
+    final String name = productData['name'];
+    final String description = productData['description'];
+    final String imageUrl = productData['imageUrl'];
+    final double price = productData['price'];
+
+    // 2. The main screen widget
+    return Scaffold(
+      appBar: AppBar(
+        // 3. Show the product name in the top bar
+        title: Text(name),
+      ),
+      // 4. This allows scrolling if the description is very long
+      body: SingleChildScrollView(
+        child: Column(
+          // 5. Make children fill the width
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            
+            // 6. The large product image
+            Image.network(
+              imageUrl,
+              height: 300, // Give it a fixed height
+              fit: BoxFit.cover, // Make it fill the space
+              // 7. Add the same loading/error builders as the card
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return const SizedBox(
+                  height: 300,
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return const SizedBox(
+                  height: 300,
+                  child: Center(child: Icon(Icons.broken_image, size: 100)),
+                );
+              },
+            ),
+            
+            // 8. A Padding widget to contain all the text
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  
+                  // 9. Product Name (large font)
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // 10. Price (large font, different color)
+                  Text(
+                    '₱${price.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.deepPurple,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // 11. A horizontal dividing line
+                  const Divider(thickness: 1),
+                  const SizedBox(height: 16),
+                  
+                  // 12. The full description
+                  Text(
+                    'About this item',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    description,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      height: 1.5, // Adds line spacing for readability
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // 13. The "Add to Cart" button (UI ONLY)
+                  // It doesn't do anything... yet.
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      // We will add logic here in Module 8
+                      print('Product ID to add: $productId');
+                    },
+                    icon: const Icon(Icons.shopping_cart_outlined),
+                    label: const Text('Add to Cart'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      textStyle: const TextStyle(fontSize: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+1.	Extract Data: We pull the values from the productData map into local variables. This makes the code much cleaner and easier to read.
+2.	Scaffold: The base for our new screen.
+3.	AppBar: When we push a new screen, Flutter automatically adds a "back" button to the AppBar, so we don't need to.
+4.	SingleChildScrollView: This is a critical widget. If the product description is very long, the user can now scroll.
+5.	Image.network: We use the same widget as before, but give it a larger, fixed height of 300.
+6.	Padding: We add padding around all the text elements.
+7.	Text Styling: We use different TextStyle properties (like fontSize and fontWeight) to create a clear visual hierarchy (name is biggest, then price, then description).
+8.	Divider: A simple visual line to separate the main info from the description.
+9.	ElevatedButton.icon: We add our "Add to Cart" button. For now, its onPressed function just prints the productId to the console so we can prove it's working.
+
+Part C: Update home_screen.dart to Navigate
+Finally, let's go back to our HomeScreen and tell the ProductCard what to do when it's tapped.
+lib/screens/home_screen.dart - Part 1: Imports
+Add the import for our new product_detail_screen.dart at the top of the file.
+
+// ... (your existing imports)
+import 'package:ecommerce_app/widgets/product_card.dart';
+import 'package:ecommerce_app/screens/product_detail_screen.dart'; // 1. ADD THIS IMPORT
+
+
+lib/screens/home_screen.dart - Part 2: The build Method
+We just need to update the itemBuilder inside our GridView.builder.
+
+           // ... (inside GridView.builder)
+            
+            itemCount: products.length,
+            itemBuilder: (context, index) {
+              // 1. Get the whole document
+              final productDoc = products[index];
+              // 2. Get the data map
+              final productData = productDoc.data() as Map<String, dynamic>;
+              
+              // 3. Find your old ProductCard
+              return ProductCard(
+                productName: productData['name'],
+                price: productData['price'],
+                imageUrl: productData['imageUrl'],
+                
+                // 4. --- THIS IS THE NEW PART ---
+                //    Add the onTap property
+                onTap: () {
+                  // 5. Navigate to the new screen
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => ProductDetailScreen(
+                        // 6. Pass the data to the new screen
+                        productData: productData,
+                        productId: productDoc.id, // 7. Pass the unique ID!
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+1.	final productDoc = ...: We already had this, but now it's more important. We need the productDoc itself, not just its data.
+2.	final productData = ...: This is the same as before.
+3.	onTap: () { ... }: We are now passing a function to the onTap property we created.
+4.	Navigator.of(context).push(...): This is the standard Flutter command to navigate to a new screen. push adds the new screen on top of the current one.
+5.	MaterialPageRoute: This creates the new screen and gives it a nice slide-in animation.
+6.	ProductDetailScreen(...): We create an instance of our new screen.
+7.	productData: productData: We pass the map of data.
+8.	productId: productDoc.id: This is critical. We pass the Firestore document's unique ID (productDoc.id) to the detail screen so it knows which product it's looking at.
+
+
+
+
+
+
+
+
+Expected Output
+1.	Full Restart your app.
+2.	Log in and go to the HomeScreen. You will see your product grid.
+3.	Tap on any product card.
+4.	You should feel a "ripple" effect, and the app will animate to the new Product Detail Screen.
+5.	The AppBar will show the product's name, and the body will show the large image, name, price, and full description.
+6.	Tap the "Add to Cart" button. Nothing will happen on screen, but your Debug Console in VS Code will print the product's ID (e.g., Product ID to add: aBcXyZ...).
+7.	Tap the back arrow in the AppBar. You should return to the HomeScreen.
+

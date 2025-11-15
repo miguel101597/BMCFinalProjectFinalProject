@@ -1,0 +1,276 @@
+Module 19 Branding & Professional UI Refactor
+ We will transform the app from a simple "Flutter-looking" app to a professionally branded e-commerce store. We will:
+1.	Add a professional Google Font (Lato) to the entire app.
+2.	Define a custom "Coffee Shop" color palette. Let's say this is your theme. You can also Define your own custom theme color palette.
+
+3.	Create a Global ThemeData to style all buttons, text fields, and cards consistently with rounded corners.
+
+4.	Add your App Logo to the HomeScreen AppBar.
+
+5.	Refine the ProductCard to round the image corners and look less "boxy".
+
+Part A: Add a Professional Font (Google Fonts)
+A custom font is the fastest way to make an app look unique.
+Step 1: Add the google_fonts Package
+In your Android Studio terminal, run:
+
+flutter pub add google_fonts
+
+Part B: Create the Global Theme in main.dart
+This is the biggest step. We will define a custom color palette and a new ThemeData to apply all our styles.
+lib/main.dart - Part 1: New Color Constants & Imports
+At the top of your main.dart file (outside of any class), add your imports and define the colors:
+
+import 'package:ecommerce_app/providers/cart_provider.dart';
+import 'package.ecommerce_app/screens/auth_wrapper.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:provider/provider.dart';
+import 'firebase_options.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_fonts/google_fonts.dart'; // 1. ADD THIS IMPORT
+
+// 2. --- ADD OUR NEW APP COLOR PALETTE ---
+const Color kRichBlack = Color(0xFF1D1F24); // A dark, rich black
+const Color kBrown = Color(0xFF8B5E3C);      // Our main "coffee" brown
+const Color kLightBrown = Color(0xFFD2B48C);  // A lighter tan/beige
+const Color kOffWhite = Color(0xFFF8F4F0);    // A warm, off-white background
+// --- END OF COLOR PALETTE ---
+
+void main() async {
+  // ... (your main function code is unchanged)
+}
+
+lib/main.dart - Part 2: The New ThemeData
+Now, find your MyApp widget and replace its entire build method with this new version that includes the full, new ThemeData.
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'eCommerce App',
+      
+      // 1. --- THIS IS THE NEW, COMPLETE THEME ---
+      theme: ThemeData(
+        // 2. Set the main color scheme
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: kBrown, // Our new primary color
+          brightness: Brightness.light,
+          primary: kBrown,
+          onPrimary: Colors.white,
+          secondary: kLightBrown,
+          background: kOffWhite, // Our new app background
+        ),
+        useMaterial3: true,
+        
+        // 3. Set the background color for all screens
+        scaffoldBackgroundColor: kOffWhite,
+
+        // 4. --- (FIX) APPLY THE GOOGLE FONT ---
+        // This applies "Lato" to all text in the app
+        textTheme: GoogleFonts.latoTextTheme(
+          Theme.of(context).textTheme,
+        ),
+
+        // 5. --- (FIX) GLOBAL BUTTON STYLE ---
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: kBrown, // Use our new brown
+            foregroundColor: Colors.white, // Text color
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12), // Rounded corners
+            ),
+          ),
+        ),
+
+        // 6. --- (FIX) GLOBAL TEXT FIELD STYLE ---
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey[400]!),
+          ),
+          labelStyle: TextStyle(color: kBrown.withOpacity(0.8)),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: kBrown, width: 2.0),
+          ),
+        ),
+
+        // 7. --- (FIX) GLOBAL CARD STYLE ---
+        cardTheme: CardTheme(
+          elevation: 1, // A softer shadow
+          color: Colors.white, // Pure white cards on the off-white bg
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          // 8. This ensures the images inside the card are rounded
+          clipBehavior: Clip.antiAlias, 
+        ),
+        
+        // 9. --- (NEW) GLOBAL APPBAR STYLE ---
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white, // Clean white AppBar
+          foregroundColor: kRichBlack, // Black icons and text
+          elevation: 0, // No shadow, modern look
+          centerTitle: true,
+        ),
+      ),
+      // --- END OF NEW THEME ---
+
+      home: const AuthWrapper(),
+    );
+  }
+}
+
+(Part B):
+●	google_fonts: We are now correctly adding the textTheme: GoogleFonts.latoTextTheme(...) line.
+●	elevatedButtonTheme: This defines a default style for all ElevatedButtons. Now all your buttons will be brown with 12px rounded corners.
+●	inputDecorationTheme: This styles all TextFormFields with a 12px rounded outline.
+●	cardTheme: This makes all Card widgets have 12px rounded corners, a soft shadow, and a pure white color.
+●	clipBehavior: Clip.antiAlias: This is a key part of the "rounded image" fix. It forces the Card to clip its children to its rounded shape.
+
+Part C: Add Your Logo to the HomeScreen AppBar
+This is your request from the last module.
+lib/screens/home_screen.dart - (Updates)
+Find your AppBar in the build method and replace the title: property.
+
+ @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        
+        // 1. --- THIS IS THE CHANGE ---
+        //    DELETE your old title:
+        /*
+        title: Text(_currentUser != null ? 'Welcome!' : 'Home'),
+        */
+
+        // 2. ADD this new title:
+        title: Image.asset(
+          'assets/images/app_logo.png', // 3. The path to your logo
+          height: 40, // 4. Set a fixed height
+        ),
+        // 5. 'centerTitle' is now handled by our global AppBarTheme
+        
+        // --- END OF CHANGE ---
+
+        actions: [
+          // All your icons (Cart, Bell, Orders, Admin, Profile)
+          // will now be 'kRichBlack' (black) because of our theme.
+          Consumer<CartProvider>(/* ... */),
+          const NotificationIcon(),
+          IconButton(icon: const Icon(Icons.receipt_long), /* ... */),
+          if (_userRole == 'admin')
+            IconButton(icon: const Icon(Icons.admin_panel_settings), /* ... */),
+          IconButton(icon: const Icon(Icons.person_outline), /* ... */),
+        ],
+      ),
+      // ... (body and floatingActionButton)
+    );
+  }
+}
+
+(Part C):
+●	We're setting the title to your app_logo.png. (Make sure you have this file in assets/images/).
+●	The AppBar will now be white with black icons, as defined in our new theme.
+
+
+Part D: Refine the ProductCard (The "Image Size" Fix)
+This will fix the "boxy" image look and make the cards more balanced.
+lib/widgets/product_card.dart - (Updates)
+Replace your entire build method for the ProductCard with this new version.
+
+ @override
+  Widget build(BuildContext context) {
+    // 1. The Card will get its style from our new 'cardTheme'
+    return Card(
+      // 2. The theme's 'clipBehavior' will handle the clipping
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 3. This Expanded makes the image take up most of the space
+          Expanded(
+            flex: 3, // Give the image 3 "parts" of the space
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.cover, // This makes the image fill its box
+              
+              // Show a loading spinner
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return const Center(child: CircularProgressIndicator());
+              },
+              
+              // Show an error icon
+              errorBuilder: (context, error, stackTrace) {
+                return const Center(
+                  child: Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                );
+              },
+            ),
+          ),
+
+          // 4. This Expanded holds the text
+          Expanded(
+            flex: 2, // Give the text 2 "parts" of the space
+            child: Padding(
+              padding: const EdgeInsets.all(10.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [
+                  // Product Name
+                  Text(
+                    productName,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    maxLines: 2, // Allow two lines for the name
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const Spacer(), // 5. Pushes the price to the bottom
+
+                  // Price
+                  Text(
+                    '₱${price.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Colors.grey[800],
+                      fontWeight: FontWeight.bold
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+(Part D):
+●	flex: 3 / flex: 2: This is the new layout logic. We are giving the Image 3 parts of the space and the Text 2 parts. This creates a much more balanced 60/40 look.
+●	maxLines: 2: We'll allow the product name to be two lines long, which looks better.
+●	const Spacer(): This is a great little widget that expands to fill all available space. It pushes the price to the very bottom of the card, which looks very clean and intentional.
+
+Expected Output
+1.	Full Restart your app.
+
+2.	New Theme: The app will look completely different!
+○	The background will be a soft off-white (kOffWhite).
+○	The AppBar will be white with black icons.
+○	Your logo will be centered in the HomeScreen AppBar.
+○	All buttons will be a rich brown (kBrown) with rounded corners.
+○	All text fields will have matching rounded corners and will be outlined in brown when you tap them.
+
+3.	New Product Cards:
+○	The product cards will be pure white, "floating" on the off-white background with a soft shadow.
+○	The images will have rounded corners, matching the card's rounded corners (thanks to clipBehavior).
+○	The cards will have a new, professional 60/40 layout, with the price neatly at the bottom.
+

@@ -1,0 +1,351 @@
+Module 4: Authentication - Firebase Logic & State Management
+In this module, we'll write the code that actually communicates with Firebase. 
+We'll add the firebase_auth package, create a new "auth wrapper" widget to check if the user is logged in, and then wire up our "Login" and "Sign Up" buttons. 
+
+We'll also add error handling (like "wrong password") and a loading spinner.
+1.	Add firebase_auth Package:
+In your Android studio terminal, run:
+
+flutter pub add firebase_auth
+○	This package gives us all the tools to sign up, log in, and log out users.
+
+2.	Enable Authentication in Firebase:
+○	Go to your Firebase Console.
+○	Open your ecommerce_app project.
+○	In the left-hand menu, go to Build > Authentication.
+○	Click the "Get started" button.
+○	Under Sign-in method, click "Email/Password" and Enable it. Click Save.
+○	If you don't do this, all your login attempts will fail.
+
+3.	Create a Placeholder HomeScreen:
+○	We need a screen to send the user to after they log in.
+○	In your lib/screens folder, create a new file: home_screen.dart.
+________________________________________
+lib/screens/home_screen.dart
+This will be a very simple screen for now, with just a "Logout" button so we can test our auth flow.
+
+// Part 1: Imports
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+// Part 2: Widget Definition
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Home'),
+        actions: [
+          // 1. Add an IconButton to the AppBar
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              // 2. Call Firebase to sign out
+              FirebaseAuth.instance.signOut();
+              // We don't need to navigate. The AuthWrapper will handle it.
+            },
+          )
+        ],
+      ),
+      body: const Center(
+        child: Text('You are logged in!'),
+      ),
+    );
+  }
+}
+
+●	IconButton: A simple icon button placed in the actions list of the AppBar (which puts it on the right side).
+●	FirebaseAuth.instance.signOut(): This is the single command to log the user out. It clears the user's session from the device.
+________________________________________
+4.	Create the AuthWrapper (The Most Important Step):
+○	We need a widget that decides which screen to show (LoginScreen or HomeScreen). This widget will be the new "home" for our app.
+○	In lib/screens, create a new file: auth_wrapper.dart.
+lib/screens/auth_wrapper.dart
+This widget will listen to Firebase's authentication state in real-time.
+
+// Part 1: Imports
+import 'package:ecommerce_app/screens/home_screen.dart';
+import 'package:ecommerce_app/screens/login_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+// Part 2: Widget Definition
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. We use a StreamBuilder to listen for auth changes
+    return StreamBuilder<User?>(
+      // 2. This is the stream from Firebase
+      stream: FirebaseAuth.instance.authStateChanges(),
+      
+      // 3. The builder runs every time the auth state changes
+      builder: (context, snapshot) {
+        
+        // 4. If the snapshot is still loading, show a spinner
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        // 5. If the snapshot has data, a user is logged in
+        if (snapshot.hasData) {
+          return const HomeScreen(); // Show the home screen
+        }
+
+        // 6. If the snapshot has no data, no user is logged in
+        return const LoginScreen(); // Show the login screen
+      },
+    );
+  }
+}
+
+●	StreamBuilder<User?>: This is a powerful widget that rebuilds itself whenever new data arrives on a "stream." The <User?> means it expects to receive a User object (or null).
+●	FirebaseAuth.instance.authStateChanges(): This is the magic. It's a stream that automatically sends a User object if someone is logged in, or null if they are logged out.
+●	snapshot.connectionState: We check if we're still waiting for the first value from Firebase.
+●	snapshot.hasData: This is true if the User object is not null (meaning, user is logged in).
+●	return HomeScreen() / return LoginScreen(): Based on the auth state, the StreamBuilder acts like a gate, showing one screen or the other.
+
+5.	Update main.dart:
+○	Now, we must tell main.dart to use our new AuthWrapper as the home, instead of LoginScreen.
+lib/main.dart (Updates)
+
+// Part 1: Imports
+// ... (remove the login_screen import)
+import 'package:ecommerce_app/screens/auth_wrapper.dart'; // 1. Import AuthWrapper
+
+// ... (main function is the same)
+
+// Part 2: MyApp Widget
+class MyApp extends StatelessWidget {
+  // ...
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      // ...
+      // 2. Change the home to AuthWrapper
+      home: const AuthWrapper(), 
+    );
+  }
+}
+●	By setting home to AuthWrapper, our app will now always check the auth state before showing anything.
+
+
+6.	Add Logic to login_screen.dart:
+○	Open your lib/screens/login_screen.dart file.
+○	We need to add a new state variable, imports, and the login function.
+lib/screens/login_screen.dart (Updates)
+Part 1: Imports and State Variables Add these to the top of the file and inside the _LoginScreenState class.
+
+// ... (other imports)
+import 'package:firebase_auth/firebase_auth.dart'; // 1. Add Firebase Auth import
+
+// ... (class LoginScreen)
+
+class _LoginScreenState extends State<LoginScreen> {
+  // ... (_formKey, controllers)
+  
+  // 2. Add a loading state variable
+  bool _isLoading = false;
+
+  // 3. Get an instance of FirebaseAuth
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // ... (dispose method)
+
+  // We will add the _login function here...
+
+●	_isLoading: A boolean to track when we are talking to Firebase. We'll use this to show a loading spinner.
+●	_auth: A reference to the Firebase Auth service.
+
+
+
+
+Part 2: The Login Function Add this new function inside your _LoginScreenState class.
+
+ // ... (inside _LoginScreenState)
+
+  Future<void> _login() async {
+    // 1. Check if the form is valid
+    if (!_formKey.currentState!.validate()) {
+      return; // If not valid, stop here
+    }
+
+    // 2. Set loading to true
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 3. This is the Firebase command to sign in
+      await _auth.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+      
+      // 4. If login is successful, the AuthWrapper's stream
+      //    will auto-navigate to HomeScreen. We don't need to do it here.
+
+    } on FirebaseAuthException catch (e) {
+      // 5. This 'catch' block handles Firebase-specific errors
+      String message = 'An error occurred';
+      if (e.code == 'user-not-found') {
+        message = 'No user found for that email.';
+      } else if (e.code == 'wrong-password') {
+        message = 'Wrong password provided.';
+      }
+      
+      // 6. Show the error message in a SnackBar
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      // 7. Catch any other general errors
+      print(e);
+    }
+
+    // 8. ALWAYS set loading to false at the end
+    if (mounted) { // Check if the widget is still on screen
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+●	async / await: We use these because signInWithEmailAndPassword is an asynchronous network request. We must await its result.
+●	setState(() { ... }): We call this to update the _isLoading variable, which tells Flutter to rebuild the widget (to show/hide the spinner).
+●	try { ... }: We put the Firebase call in a try block because it might fail (e.g., wrong password).
+●	on FirebaseAuthException catch (e): This block runs only if Firebase throws an error. We can inspect e.code to give the user a specific message.
+●	ScaffoldMessenger: This is how you show a SnackBar (the little pop-up at the bottom of the screen).
+●	if (mounted): A safety check. It ensures the widget is still part of the app before trying to setState.
+Part 3: Update the ElevatedButton Find your "Login" ElevatedButton in the build method and change it to use the new _isLoading state and call the _login function.
+
+             // ... (in the build method)
+              
+              ElevatedButton(
+                // ... (style is the same)
+                
+                // 1. Call our new _login function
+                onPressed: _login, 
+                
+                // 2. Show a spinner OR text based on _isLoading
+                child: _isLoading 
+                    ? const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ) 
+                    : const Text('Login'),
+              ),
+
+●	onPressed: _login: We pass the name of our _login function to the button.
+●	_isLoading ? ... : ...: This is a "ternary operator." It's a short if/else statement.
+○	IF _isLoading is true, show a CircularProgressIndicator.
+○	ELSE (:) show the Text('Login').
+
+7.	Add Logic to signup_screen.dart:
+○	This is almost identical to the login screen. Open lib/screens/signup_screen.dart.
+lib/screens/signup_screen.dart (Updates)
+Part 1: Imports and State Variables Add these inside _SignUpScreenState.
+
+// ... (other imports)
+import 'package:firebase_auth/firebase_auth.dart'; // 1. Add Firebase Auth import
+
+// ... (class SignUpScreen)
+
+class _SignUpScreenState extends State<SignUpScreen> {
+  // ... (_formKey, controllers)
+  
+  // 2. Add loading state and auth instance
+  bool _isLoading = false;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // ... (dispose method)
+  
+  // We will add the _signUp function here...
+
+Part 2: The Sign Up Function Add this new function inside _SignUpScreenState.
+ Future<void> _signUp() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 1. This is the Firebase command to CREATE a user
+      await _auth.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+      
+      // 2. AuthWrapper will auto-navigate to HomeScreen.
+
+    } on FirebaseAuthException catch (e) {
+      // 3. Handle specific sign-up errors
+      String message = 'An error occurred';
+      if (e.code == 'weak-password') {
+        message = 'The password provided is too weak.';
+      } else if (e.code == 'email-already-in-use') {
+        message = 'An account already exists for that email.';
+      }
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } catch (e) {
+      print(e);
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+●	createUserWithEmailAndPassword: This is the only major change from the login function. It tells Firebase to create a new user.
+●	The error codes (e.code) are different (e.g., weak-password).
+Part 3: Update the ElevatedButton Finally, update the "Sign Up" button in the build method.
+
+             // ... (in the build method)
+              
+              ElevatedButton(
+                // ... (style is the same)
+                
+                // 1. Call our new _signUp function
+                onPressed: _signUp, 
+                
+                // 2. Show a spinner OR text
+                child: _isLoading 
+                    ? const CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ) 
+                    : const Text('Sign Up'),
+              ),
+
+
+Expected Output
+1.	Full Restart your app. (flutter run).
+2.	Your app will open to the Login Screen (because AuthWrapper sees you are logged out).
+3.	Click the "Sign Up" button.
+4.	Try to create an account with a weak password (e.g., "123"). You should see a SnackBar at the bottom saying "The password provided is too weak."
+5.	Create a valid account (e.g., test@test.com and password123).
+6.	The "Sign Up" button will show a loading spinner.
+7.	After a second, you should be automatically navigated to the Home Screen! This is the AuthWrapper working.
+8.	On the HomeScreen, click the logout icon in the app bar.
+9.	You should be immediately sent back to the Login Screen.
+10.	Now, log in with the account you just created. The button will spin, and you'll be sent to the HomeScreen.
+11.	Close the app completely.
+12.	Re-open the app. You should see your splash screen, then go directly to the Home Screen. Firebase remembers your session!
+

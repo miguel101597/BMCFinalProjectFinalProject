@@ -1,0 +1,289 @@
+Module 3: Authentication - UI (Login & Sign Up)
+This module is all about UI. We'll build the two screens that every e-commerce app needs: 
+a Login Screen and a Sign Up Screen. 
+
+We will focus on creating the layout, text fields, and buttons. We will not add any Firebase logic in this module—that's next. 
+We'll just build the visuals and the navigation between these two screens.
+1.	Create File Structure:
+○	In your lib folder, create a new folder named screens.
+○	Inside lib/screens, create two new files:
+■	login_screen.dart
+■	signup_screen.dart
+2.	Update main.dart to Show the Login Screen:
+○	For now, we want our app to start on the LoginScreen.
+○	Open lib/main.dart and make these changes.
+________________________________________
+lib/main.dart (Updates)
+Part 1: Import Add an import for your new login_screen.dart file at the top.
+// ... (other imports)
+// 1. Import your new login screen
+import 'package:ecommerce_app/screens/login_screen.dart';
+
+Part 2: MyApp Widget Change the home: property from the placeholder Scaffold to your new LoginScreen.
+
+class MyApp extends StatelessWidget {
+  // ... (const MyApp)
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false, 
+      title: 'eCommerce App',
+      theme: ThemeData(
+        primarySwatch: Colors.deepPurple,
+      ),
+      // 1. Change this line
+      home: const LoginScreen(), // 2. Set LoginScreen as the home
+    );
+  }
+}
+
+________________________________________
+lib/screens/login_screen.dart
+We'll build this file in logical parts. This screen needs to be a StatefulWidget because it has to manage the text that the user is typing into the fields.
+Part 1: Imports and Widget Definition
+
+import 'package:ecommerce_app/screens/signup_screen.dart';
+import 'package:flutter/material.dart';
+
+// 1. Create a StatefulWidget
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+// 2. This is the State class
+class _LoginScreenState extends State<LoginScreen> {
+
+  // 3. Create a GlobalKey for the Form
+  final _formKey = GlobalKey<FormState>();
+
+  // 4. Create TextEditingControllers
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  // 5. Clean up controllers when the widget is removed
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+  
+  // The 'build' method (UI) goes here next...
+
+●	StatefulWidget: We use this because the screen needs to "remember" what the user is typing. A StatelessWidget cannot.
+
+●	_LoginScreenState: This class holds all the state (the variables) for our widget.
+
+●	_formKey: This is a key that lets us identify and control our Form widget. We'll use it to check if the fields are valid.
+
+●	TextEditingController: These objects are essential. They control the text inside a TextFormField and let us read the user's input.
+
+●	dispose(): This is a critical lifecycle method. We must dispose of our controllers when the screen is closed to prevent memory leaks.
+
+Part 2: The build Method (Layout)
+Now, add the build method inside your _LoginScreenState class.
+ @override
+  Widget build(BuildContext context) {
+    // 1. A Scaffold provides the basic screen structure
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Login'),
+      ),
+      // 2. SingleChildScrollView prevents the keyboard from 
+      //    causing a "pixel overflow" error
+      body: SingleChildScrollView(
+        child: Padding(
+          // 3. Add padding around the form
+          padding: const EdgeInsets.all(16.0),
+          // 4. The Form widget acts as a container for our fields
+          child: Form(
+            key: _formKey, // 5. Assign our key to the Form
+            // 6. A Column arranges its children vertically
+            child: Column(
+              // 7. Center the contents of the column
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // The Form Fields will go here
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+●	Scaffold: The main container for the screen, giving us the AppBar (top bar) and body.
+●	SingleChildScrollView: A crucial widget. When the user taps a text field, the keyboard appears. This widget allows the user to scroll the screen if the keyboard covers the fields.
+●	Padding: Adds some empty space around the form.
+●	Form: A container that helps us manage and validate all our TextFormFields at once.
+●	key: _formKey: This links our _formKey variable to the Form widget, so we can call _formKey.currentState.validate().
+●	Column: The primary layout widget here, stacking all our fields and buttons vertically.
+
+Part 3: Form Fields (Email & Password)
+Now, let's add the actual text fields inside the children: [ ] array of the Column.
+             // ... (inside the Column's children)
+              
+              // 1. A spacer
+              const SizedBox(height: 20),
+
+              // 2. The Email Text Field
+              TextFormField(
+                controller: _emailController, // 3. Link the controller
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(), // 4. Nice border
+                ),
+                keyboardType: TextInputType.emailAddress, // 5. Show '@' on keyboard
+                // 6. Validator function
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your email';
+                  }
+                  if (!value.contains('@')) {
+                    return 'Please enter a valid email';
+                  }
+                  return null; // 'null' means the input is valid
+                },
+              ),
+
+              // 7. A spacer
+              const SizedBox(height: 16),
+
+              // 8. The Password Text Field
+              TextFormField(
+                controller: _passwordController, // 9. Link the controller
+                obscureText: true, // 10. This hides the password
+                decoration: const InputDecoration(
+                  labelText: 'Password',
+                  border: OutlineInputBorder(),
+                ),
+                // 11. Validator function
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your password';
+                  }
+                  if (value.length < 6) {
+                    return 'Password must be at least 6 characters';
+                  }
+                  return null;
+                },
+              ),
+
+              // Buttons will go here next...
+
+●	TextFormField: This is Flutter's standard input field widget for forms.
+●	controller:: We link the _emailController we defined in Part 1. Now, _emailController.text will always give us the current text in the field.
+●	decoration:: This styles the field. labelText shows a floating label, and OutlineInputBorder gives it a modern, boxed look.
+●	keyboardType:: A helpful property that tells the phone which keyboard to show.
+●	validator:: This function runs when we try to submit the form. If it returns a String, that string is shown as an error message. If it returns null, the field is valid.
+●	obscureText: true: This is what turns the input into "•••" for a password field.
+
+Part 4: Buttons (Login & Toggle to Sign Up)
+Finally, add the buttons at the end of the Column's children array.
+
+             // ... (after the Password field)
+
+              // 1. A spacer
+              const SizedBox(height: 20),
+
+              // 2. The Login Button
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50), // 3. Make it wide
+                ),
+                // 4. onPressed is the click handler
+                onPressed: () {
+                  // 5. This checks all validators
+                  if (_formKey.currentState!.validate()) {
+                    // Logic for login will go here in the next module
+                    print('Email: ${_emailController.text}');
+                    print('Password: ${_passwordController.text}');
+                  }
+                },
+                child: const Text('Login'),
+              ),
+
+              // 6. A spacer
+              const SizedBox(height: 10),
+
+              // 7. The "Sign Up" toggle button
+              TextButton(
+                onPressed: () {
+                  // 8. Navigate to the Sign Up screen
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) => const SignUpScreen(),
+                    ),
+                  );
+                },
+                child: const Text("Don't have an account? Sign Up"),
+              ),
+
+●	ElevatedButton: A standard button with a shadow and background color.
+●	minimumSize:: We style the button to be at least 50 pixels tall and as wide as the screen.
+●	onPressed: () { ... }: This is the code that runs when the button is tapped.
+●	if (_formKey.currentState!.validate()) { ... }: This is our form validation check. It runs the validator function on all TextFormFields inside the Form. If they all return null, this if block runs.
+●	TextButton: A flat button with no background. Perfect for secondary actions.
+●	Navigator.of(context).pushReplacement(...): This is how we navigate. pushReplacement replaces the current LoginScreen with the SignUpScreen, so the user can't press the "back" button to return to the login screen.
+
+lib/screens/signup_screen.dart
+This file will be almost identical to login_screen.dart.
+1.	Copy all the code from lib/screens/login_screen.dart.
+2.	Paste it into lib/screens/signup_screen.dart.
+3.	Make these 4 changes:
+Change the import from signup_screen.dart to login_screen.dart:
+
+import 'package:ecommerce_app/screens/login_screen.dart';
+○	Rename the class: class LoginScreen -> class SignUpScreen
+○	Rename the state class: _LoginScreenState -> _SignUpScreenState
+○	Change the AppBar title, the ElevatedButton text, and the TextButton text and navigation:
+
+// ... inside the build method
+return Scaffold(
+  appBar: AppBar(
+    title: const Text('Sign Up'), // CHANGE 1
+  ),
+  // ... (body is the same)
+  // ... (form fields are the same)
+
+  // ... In the Column's children:
+          ElevatedButton(
+            // ... (style is the same)
+            onPressed: () {
+              if (_formKey.currentState!.validate()) {
+                // Logic for sign up will go here in the next module
+                print('Sign Up Valid!');
+              }
+            },
+            child: const Text('Sign Up'), // CHANGE 2
+          ),
+
+          const SizedBox(height: 10),
+
+          TextButton(
+            onPressed: () {
+              // 3. Navigate BACK to the Login screen
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => const LoginScreen(),
+                ),
+              );
+            },
+            // CHANGE 4
+            child: const Text("Already have an account? Login"),
+          ),
+// ...
+________________________________________
+Expected Output
+1.	Restart your app (flutter run). You can't hot reload to see the main.dart change.
+2.	Your app will now open directly to the Login Screen.
+3.	You should see the "Email" and "Password" fields.
+4.	Try tapping the "Login" button while the fields are empty. You should see your red validation error messages ("Please enter your email", etc.).
+5.	Tap the "Don't have an account? Sign Up" button.
+6.	The screen should animate to the Sign Up Screen.
+7.	Tap the "Already have an account? Login" button.
+8.	The screen should animate back to the Login Screen.

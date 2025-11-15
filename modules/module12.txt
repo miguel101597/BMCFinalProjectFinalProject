@@ -1,0 +1,274 @@
+Module 12: Admin Order Management
+In this module, we'll build the screen for the admin to view and manage all incoming orders. This is the "verification" step you asked about. The admin will be able to see all orders, check their status (e.g., "Pending"), and update that status to "Processing" or "Shipped" after they've manually verified the payment.
+Thanks to Firestore's real-time nature, when the admin updates the status, the user will instantly see that change on their "My Orders" screen.
+
+Part A: Add Navigation to the Admin Panel
+First, let's add a button to our existing AdminPanelScreen that will take the admin to our new AdminOrderScreen.
+lib/screens/admin_panel_screen.dart - Part 1: Imports
+Add this import at the top of your admin_panel_screen.dart file. We're about to create this new screen.
+
+// ... (other imports)
+import 'package:ecommerce_app/screens/admin_order_screen.dart'; // 1. ADD THIS
+
+lib/screens/admin_panel_screen.dart - Part 2: The build Method
+Find the Column widget inside your build method. We'll add a new ElevatedButton at the very top of the children: [] list, before the "Add Product" form.
+
+ @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        // 1. Let's change the title to be more general
+        title: const Text('Admin Panel'),
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column( // 2. Find this Column
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              
+              // 3. --- ADD THIS NEW BUTTON ---
+              ElevatedButton.icon(
+                icon: const Icon(Icons.list_alt),
+                label: const Text('Manage All Orders'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.indigo, // A different color
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  textStyle: const TextStyle(fontSize: 16),
+                ),
+                onPressed: () {
+                  // 4. Navigate to our new screen
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const AdminOrderScreen(),
+                    ),
+                  );
+                },
+              ),
+              
+              // 5. A divider to separate it
+              const Divider(height: 30, thickness: 1),
+              
+              const Text(
+                'Add New Product',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+
+              // 6. The rest of your form (wrapped in its own Form widget)
+              Form(
+                key: _formKey,
+                child: Column(
+                  // ... (your existing form with Image URL, Name, Price, etc.)
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+(Part A):
+●	We've added a new ElevatedButton.icon to the top of the admin panel.
+●	Its onPressed uses a standard Navigator.push to open the AdminOrderScreen (which we'll create right now).
+●	I also added a Divider and a Text title to make the UI cleaner.
+
+Part B: Create the AdminOrderScreen
+This is the new screen where the admin will spend their time. It will show a list of all orders from all users.
+Step 1: Create the new file
+●	In your lib/screens folder, create a new file: admin_order_screen.dart.
+Step 2: Build the AdminOrderScreen
+This needs to be a StatefulWidget because we will build helper functions (_updateOrderStatus, _showStatusDialog) that belong to its State.
+lib/screens/admin_order_screen.dart - Part 1: Imports & State Definition
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // We'll use this for dates again
+
+lib/screens/admin_order_screen.dart - Part 2: State Logic
+This is where we'll put our functions to (A) update Firestore and (B) show the pop-up dialog.
+
+class AdminOrderScreen extends StatefulWidget {
+  const AdminOrderScreen({super.key});
+
+  @override
+  State<AdminOrderScreen> createState() => _AdminOrderScreenState();
+}
+
+class _AdminOrderScreenState extends State<AdminOrderScreen> {
+  // 1. Get an instance of Firestore
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // 2. This is the function that updates the status in Firestore
+  Future<void> _updateOrderStatus(String orderId, String newStatus) async {
+    try {
+      // 3. Find the document and update the 'status' field
+      await _firestore.collection('orders').doc(orderId).update({
+        'status': newStatus,
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order status updated!')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update status: $e')),
+      );
+    }
+  }
+  
+  // 4. This function shows the update dialog
+  void _showStatusDialog(String orderId, String currentStatus) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        // 5. A list of all possible statuses
+        const statuses = ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
+        
+        return AlertDialog(
+          title: const Text('Update Order Status'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min, // Make the dialog small
+            children: statuses.map((status) {
+              // 6. Create a button for each status
+              return ListTile(
+                title: Text(status),
+                // 7. Show a checkmark next to the current status
+                trailing: currentStatus == status ? const Icon(Icons.check) : null,
+                onTap: () {
+                  // 8. When tapped:
+                  _updateOrderStatus(orderId, status); // Call update
+                  Navigator.of(context).pop(); // Close the dialog
+                },
+              );
+            }).toList(),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            )
+          ],
+        );
+      },
+    );
+  }
+  
+  // The build method is next...
+
+(Part B, Step 2):
+1.	_updateOrderStatus(...): This async function takes an orderId and a newStatus. It uses the .update() command to change only the status field for that specific order document.
+2.	_showStatusDialog(...): This function builds and shows an AlertDialog.
+3.	statuses.map(...): We turn our list of strings into a list of ListTile widgets.
+4.	trailing: ...: We add a checkmark icon to the ListTile that matches the currentStatus.
+5.	onTap: ...: When the admin taps a new status, we call our _updateOrderStatus function and then pop() the dialog to close it.
+lib/screens/admin_order_screen.dart - Part 3: The build Method (UI)
+Add this build method inside your _AdminOrderScreenState class.
+
+ @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Manage Orders'),
+      ),
+      // 1. Use a StreamBuilder to get all orders
+      body: StreamBuilder<QuerySnapshot>(
+        // 2. This is our query
+        stream: _firestore
+            .collection('orders')
+            .orderBy('createdAt', descending: true) // Newest first
+            .snapshots(),
+            
+        builder: (context, snapshot) {
+          // 3. Handle all states: loading, error, empty
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('No orders found.'));
+          }
+
+          // 4. We have the orders!
+          final orders = snapshot.data!.docs;
+
+          return ListView.builder(
+            itemCount: orders.length,
+            itemBuilder: (context, index) {
+              final order = orders[index];
+              final orderData = order.data() as Map<String, dynamic>;
+              
+              // 5. Format the date (same as OrderCard)
+              final Timestamp timestamp = orderData['createdAt'];
+              final String formattedDate = DateFormat('MM/dd/yyyy hh:mm a')
+                  .format(timestamp.toDate());
+              
+              // 6. Get the current status
+              final String status = orderData['status'];
+
+              // 7. Build a Card for each order
+              return Card(
+                margin: const EdgeInsets.all(8.0),
+                child: ListTile(
+                  title: Text(
+                    'Order ID: ${order.id}', // Show the doc ID
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  subtitle: Text(
+                    'User: ${orderData['userId']}\n'
+                    'Total: ₱${(orderData['totalPrice']).toStringAsFixed(2)} | Date: $formattedDate'
+                  ),
+                  isThreeLine: true,
+                  
+                  // 8. Show the status with a colored chip
+                  trailing: Chip(
+                    label: Text(
+                      status,
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                    backgroundColor: 
+                      status == 'Pending' ? Colors.orange : 
+                      status == 'Processing' ? Colors.blue :
+                      status == 'Shipped' ? Colors.deepPurple : 
+                      status == 'Delivered' ? Colors.green : Colors.red,
+                  ),
+                  
+                  // 9. On tap, show our update dialog
+                  onTap: () {
+                    _showStatusDialog(order.id, status);
+                  },
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+(Part B, Step 3):
+1.	StreamBuilder: We use this to get a real-time list of orders.
+2.	stream: ...: Notice we are not using .where('userId', ...)! The admin needs to see all orders from all users. We just sort them by date.
+3.	ListView.builder: We build a list.
+4.	ListTile: We show the order.id (so the admin can find it), the userId, and the total.
+5.	trailing: Chip(...): We use a Chip widget to make the status stand out. We use a ternary operator (? :) to change the backgroundColor of the chip based on the status string. This gives instant visual feedback.
+6.	onTap: () { ... }: When the admin taps the card, we call our _showStatusDialog function, passing in the order.id and the currentStatus.
+
+Expected Output
+1.	Full Restart your app.
+2.	Log in as your Admin user.
+3.	On the HomeScreen, tap the Admin Panel icon.
+4.	You'll be on the "Admin Panel" screen. You should see your new "Manage All Orders" button at the top.
+5.	Tap it. You'll be navigated to the "Manage Orders" screen.
+6.	You will see a list of all the orders placed so far (from Module 10).
+7.	The "Pending" orders will have an orange "Pending" chip.
+8.	Tap on a pending order.
+9.	A dialog will appear with the title "Update Order Status" and a list of options (Pending, Processing, Shipped, etc.).
+10.	Tap "Shipped".
+11.	The dialog will close, and the ListTile for that order will instantly update to show a deepPurple "Shipped" chip.
+12.	(The "Magic" Step): Log out. Log back in as the regular user who placed that order. Go to their "My Orders" screen (from Module 11). They will now see that their order status is "Shipped"!
+

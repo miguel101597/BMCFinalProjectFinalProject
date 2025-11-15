@@ -1,0 +1,145 @@
+Module 2: App Branding - Logo & Splash Screen
+In this module, we'll replace the default Flutter logo with your own custom app icon. We'll also add a professional splash screen that appears as your app is loading, giving it a much more polished feel. 
+We'll use the flutter_native_splash package to handle this, as it's the modern, standard way to create native splash screens.
+
+Part A: Setting up the App Icon (Android)
+Your app's icon is what users see on their home screen. We need to replace the default Flutter icon with our own.
+1.	Create your Logo: You'll need a logo for your app. A good source size is 1024x1024 pixels as a PNG file. For this tutorial, you can create a simple one or download a placeholder icon.
+
+2.	Use an App Icon Generator: Android requires your icon in many different sizes. The easiest way to create these is with a free online tool.
+○	Go to a site like App Icon Generator.
+○	Upload your 1024x1024 logo.
+○	Select "Android" 
+○	Generate and download the zip file.
+
+3.	Replace Android Icons:
+○	Unzip the file. You will find a folder named android or res.
+○	Inside, you'll see several mipmap- folders (mipmap-mdpi, mipmap-hdpi, mipmap-xhdpi, etc.).
+○	Each folder contains an ic_launcher.png file.
+○	Copy all of these mipmap- folders.
+○	In your Flutter project, navigate to android/app/src/main/res/.
+○	Paste the folders here, choosing to replace/merge any existing folders and files. This will overwrite the default Flutter logos with your new ones.
+
+Part B: Creating the Splash Screen
+Add the Package: Open your terminal in Android Studio and run:
+
+flutter pub add flutter_native_splash:2.4.0
+
+1.	This adds the package to your pubspec.yaml file.
+2.	Add Splash Image Asset:
+○	In the root of your ecommerce_app folder (at the same level as lib and android), create a new folder named assets.
+○	Inside assets, create another folder named images.
+○	Place your splash screen logo inside this folder (e.g., assets/images/splash_logo.png). This image should be simple and clear. A good size is around 1200x1200 pixels.
+3.	Configure pubspec.yaml:
+○	Open the pubspec.yaml file in your project root.
+○	We need to tell Flutter about our new assets folder.
+pubspec.yaml (Assets)
+Find the flutter: section (it's usually near the bottom) and add the assets: block like this. Indentation is critical in YAML files. assets: must be at the same indentation level as uses-material-design.
+
+# ... (other yaml content)
+
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material.Icons class.
+  uses-material-design: true
+
+  # 1. Add this block to register your assets folder
+  assets:
+    - assets/images/ 
+
+●	assets:: This is the main key for declaring asset folders.
+●	- assets/images/: This line tells Flutter to include everything inside the assets/images/ folder. The trailing / is important.
+
+Part C: Configure Splash Screen Package
+1.	Add Splash Config to pubspec.yaml:
+○	At the very bottom of your pubspec.yaml file (after the assets: block), add the following configuration.
+pubspec.yaml (flutter_native_splash)
+
+# ... (all the flutter content above)
+
+# 1. Add this new section at the end of the file
+flutter_native_splash:
+  
+  # 2. Set the background color of your splash screen
+  color: "#FFFFFF" # This is white
+  
+  # 3. Point to your splash logo file
+  image: assets/images/splash_logo.png 
+
+  # 4. Configuration for the Android splash screen
+  android_12:
+    color: "#FFFFFF"
+    image: assets/images/splash_logo.png
+  
+  # 5. Configuration for the web splash screen
+
+ # Web: only supports `true` (boolean), no image/color override
+
+  web: true
+
+●	flutter_native_splash:: This tells the system that the following lines are configuration for this specific package.
+●	color: "#FFFFFF": This sets the native background color of the splash screen. This appears instantly, even before Flutter loads. We're setting it to white.
+●	image: assets/images/splash_logo.png: This tells the package where to find your logo. This is used for older Android versions.
+●	android_12:: Android 12 introduced a new splash screen system. This block provides specific configuration for it. We'll use the same color and image.
+●	web:: This block configures the splash screen for your web build, using the same assets.
+2.	Run the Splash Screen Generator:
+○	Save your pubspec.yaml file.
+In your terminal, run the package's command:
+
+dart run flutter_native_splash:create
+○	You will see output in the console as it generates the splash screen files for Android, web, and iOS.
+
+3.	Update main.dart to Hide the Splash:
+○	The splash screen shows until we tell it to hide. We should hide it after our app and Firebase are finished initializing.
+○	Open lib/main.dart. We need to make two small changes.
+
+
+lib/main.dart (Updates)
+Part 1: Imports Add an import for the splash screen package at the top.
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart'; 
+import 'firebase_options.dart';
+
+// 1. Import the native splash package
+import 'package:flutter_native_splash/flutter_native_splash.dart'; 
+
+Part 2: main() function We need to "preserve" the splash screen before runApp and "remove" it after initialization is complete.
+
+void main() async {
+  
+  // 1. Preserve the splash screen
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+  
+  // 2. Initialize Firebase (from Module 1)
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform, 
+  );
+  
+  // 3. Run the app (from Module 1)
+  runApp(const MyApp());
+
+  // 4. Remove the splash screen after app is ready
+  FlutterNativeSplash.remove(); 
+}
+
+// ... The MyApp widget remains exactly the same ...
+
+●	WidgetsBinding widgetsBinding = ...: We slightly modify the ensureInitialized line to store its result in a variable.
+●	FlutterNativeSplash.preserve(...): This command tells the splash screen to stay visible and not to auto-hide.
+●	FlutterNativeSplash.remove(): We place this command after runApp. It tells the splash screen to hide itself, revealing our MyApp widget. Because our Firebase.initializeApp is an await, we know this won't run until Firebase is connected and the app is ready to be drawn.
+________________________________________
+Expected Output
+Stop and completely rebuild your app. 
+Do not use Hot Reload. You must do a fresh build to see changes to the app icon and native splash screen.
+
+flutter run
+
+1.	App Icon: On your Android phone's home screen or app drawer, you should now see your new logo instead of the default Flutter icon.
+
+2.	Splash Screen: When you tap the app to open it, you should immediately see your splash_logo.png on a white background. 
+
+This will stay for a moment while Firebase initializes, and then it will disappear, revealing your "Firebase is Connected!" home page.
+

@@ -1,0 +1,373 @@
+Description: In this module, we'll finally make the "Add to Cart" button work! To do this, we need a way to share data (the list of cart items) between different screens. We'll learn how to use the provider package, which is the simplest, most recommended way to manage app-wide state in Flutter.
+Our cart will be local-only for this module, meaning the items will be stored in the app's memory and will be cleared if you close the app. We'll connect it to Firestore in the next module.
+
+Part A: Setup the CartProvider (The "Brain")
+Step 1: Add the provider Package
+This package lets us create a "Provider" that "provides" our cart's data to any screen that asks for it.
+In your Android Studio terminal, run:
+
+flutter pub add provider
+
+Step 2: Create the CartProvider File
+This is the "brain" of our shopping cart. It will hold the list of items and the logic to add/remove them.
+1.	In your lib folder, create a new folder named providers.
+2.	Inside lib/providers, create a new file: cart_provider.dart.
+
+lib/providers/cart_provider.dart - Part 1: The CartItem Model
+First, at the top of the file, let's define what a CartItem looks like. This is just a plain Dart class, not a widget.
+
+// 1. A simple class to hold the data for an item in the cart
+class CartItem {
+  final String id;       // The unique product ID
+  final String name;
+  final double price;
+  int quantity;        // Quantity can change, so it's not final
+
+  CartItem({
+    required this.id,
+    required this.name,
+    required this.price,
+    this.quantity = 1, // Default to 1 when added
+  });
+}
+●	This is a "model" or "data class." Its only job is to hold information about a single item in our cart.
+
+lib/providers/cart_provider.dart - Part 2: The CartProvider Class
+Now, in the same file, below the CartItem class, add the main provider.
+
+import 'package:flutter/foundation.dart'; // Gives us ChangeNotifier
+
+// (Put the CartItem class from Part 1 here)
+
+// 1. The CartProvider class "mixes in" ChangeNotifier
+class CartProvider with ChangeNotifier {
+  
+  // 2. This is the private list of items.
+  //    No one outside this class can access it directly.
+  final List<CartItem> _items = [];
+
+  // 3. A public "getter" to let widgets *read* the list of items
+  List<CartItem> get items => _items;
+
+  // 4. A public "getter" to calculate the total number of items
+  int get itemCount {
+    int total = 0;
+    for (var item in _items) {
+      total += item.quantity;
+    }
+    return total;
+  }
+
+  // 5. A public "getter" to calculate the total price
+  double get totalPrice {
+    double total = 0.0;
+    for (var item in _items) {
+      total += (item.price * item.quantity);
+    }
+    return total;
+  }
+
+  // 6. The main logic: "Add Item to Cart"
+  void addItem(String id, String name, double price) {
+    // 7. Check if the item is already in the cart
+    var index = _items.indexWhere((item) => item.id == id);
+
+    if (index != -1) {
+      // 8. If YES: just increase the quantity
+      _items[index].quantity++;
+    } else {
+      // 9. If NO: add it to the list as a new item
+      _items.add(CartItem(id: id, name: name, price: price));
+    }
+
+    // 10. CRITICAL: This tells all "listening" widgets to rebuild!
+    notifyListeners();
+  }
+
+  // 11. The "Remove Item from Cart" logic
+  void removeItem(String id) {
+    _items.removeWhere((item) => item.id == id);
+    notifyListeners(); // Tell widgets to rebuild
+  }
+}
+1.	with ChangeNotifier: This is a "mixin." It's like giving our class superpowers. It gives us the special notifyListeners() method.
+2.	_items: The list is marked with _ to make it private. This forces other widgets to use our special functions (addItem, removeItem) to change it.
+3.	get items: A "getter" is a read-only property. This lets widgets see the list but not change it.
+4.	get itemCount: A "computed property" that calculates the total quantity.
+5.	get totalPrice: Another computed property that calculates the total price.
+6.	addItem(...): Our main function.
+7.	indexWhere(...): This is a helper to find the item in the list. It returns -1 if not found.
+8.	_items[index].quantity++: If we find it, we just increment the quantity.
+9.	_items.add(...): If it's not found, we add a new CartItem to the list.
+10.	notifyListeners(): This is the most important part. After we change the _items list, we call this to send a signal. Any widget that is "listening" to our CartProvider will now rebuild itself to show the new data (like the cart badge!).
+
+
+Part B: Connect the Provider to our App
+Now we have a "brain," but our app doesn't know about it. We need to "provide" it to our widget tree.
+Step 3: Update main.dart
+We will wrap our entire app in a widget called ChangeNotifierProvider.
+lib/main.dart - Part 1: Imports
+
+// ... (your existing imports)
+import 'package:ecommerce_app/providers/cart_provider.dart'; // 1. ADD THIS
+import 'package:provider/provider.dart'; // 2. ADD THIS
+
+lib/main.dart - Part 2: The main() Function
+We'll modify the runApp() line.
+
+void main() async {
+  // ... (all your existing splash screen and Firebase init code)
+  
+  // 1. This is the line we're changing
+  runApp(
+    // 2. We wrap our app in the provider
+    ChangeNotifierProvider(
+      // 3. This "creates" one instance of our cart
+      create: (context) => CartProvider(),
+      // 4. The child is our normal app
+      child: const MyApp(),
+    ),
+  );
+  
+  // ... (your splash screen remove code)
+}
+
+// ... (The MyApp class is unchanged)
+
+●	ChangeNotifierProvider: This widget from the provider package is now the parent of MyApp. It creates one single instance of our CartProvider and makes it available to any widget in our entire app that asks for it.
+
+Part C: Use the Provider in our Screens
+Now, let's make our widgets "ask" for the cart data!
+Step 4: Update product_detail_screen.dart
+Let's make the "Add to Cart" button work.
+lib/screens/product_detail_screen.dart - Part 1: Imports
+
+// ... (your existing imports)
+import 'package:ecommerce_app/providers/cart_provider.dart'; // 1. ADD THIS
+import 'package:provider/provider.dart'; // 2. ADD THIS
+
+lib/screens/product_detail_screen.dart - Part 2: The build Method
+We'll find our ElevatedButton and update its onPressed function.
+
+ @override
+  Widget build(BuildContext context) {
+    // ... (extracting name, description, etc. is all the same)
+    final String name = productData['name'];
+    final double price = productData['price'];
+    
+    // 1. ADD THIS LINE: Get the CartProvider
+    // We set listen: false because we are not rebuilding, just calling a function
+    final cart = Provider.of<CartProvider>(context, listen: false);
+
+    return Scaffold(
+      // ... (AppBar is the same)
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // ... (Image, Padding, Text... all the same)
+            
+            // 3. Find your "Add to Cart" button
+            ElevatedButton.icon(
+              onPressed: () {
+                // 4. THIS IS THE NEW LOGIC!
+                // Call the addItem function from our provider
+                cart.addItem(productId, name, price);
+
+                // 5. Show a confirmation pop-up
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Added to cart!'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.shopping_cart_outlined),
+              label: const Text('Add to Cart'),
+              // ... (style is the same)
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+1.	Provider.of<CartProvider>(context, listen: false): This is how a widget "asks" for the provider.
+○	Provider.of: This is the command.
+○	<CartProvider>: This is the type of provider we want.
+○	listen: false: This is a critical optimization. It means "I just want to call functions on the provider, I don't need to rebuild this whole screen if the cart changes."
+2.	cart.addItem(...): We call the function we wrote, passing in the product data.
+3.	ScaffoldMessenger: This is how you show a SnackBar (the little pop-up at the bottom) to give the user feedback.
+
+Part D: Create the CartScreen to View Items
+We need a new screen to show what's in the cart.
+Step 5: Create cart_screen.dart (New File)
+1.	In lib/screens, create a new file: cart_screen.dart.
+2.	Paste the following code:
+
+import 'package.ecommerce_app/providers/cart_provider.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+class CartScreen extends StatelessWidget {
+  const CartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 1. Get the cart. This time, we *want* to listen (default)
+    //    so this screen rebuilds when we remove an item.
+    final cart = Provider.of<CartProvider>(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Your Cart'),
+      ),
+      body: Column(
+        children: [
+          // 2. The list of items
+          Expanded(
+            // 3. If cart is empty, show a message
+            child: cart.items.isEmpty
+                ? const Center(child: Text('Your cart is empty.'))
+                : ListView.builder(
+                    itemCount: cart.items.length,
+                    itemBuilder: (context, index) {
+                      final cartItem = cart.items[index];
+                      // 4. A ListTile to show item details
+                      return ListTile(
+                        leading: CircleAvatar(
+                          // Show a mini-image (or first letter)
+                          child: Text(cartItem.name[0]),
+                        ),
+                        title: Text(cartItem.name),
+                        subtitle: Text('Qty: ${cartItem.quantity}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 5. Total for this item
+                            Text(
+                              '₱${(cartItem.price * cartItem.quantity).toStringAsFixed(2)}'),
+                            // 6. Remove button
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () {
+                                // 7. Call the removeItem function
+                                cart.removeItem(cartItem.id);
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          
+          // 8. The Total Price Summary
+          Card(
+            margin: const EdgeInsets.all(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Total:',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    '₱${cart.totalPrice.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // We'll add a "Checkout" button here in a future module
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+1.	Provider.of<CartProvider>(context): This time, we don't set listen: false. The default is listen: true, which is what we want. This screen will now "listen" for notifyListeners() and rebuild itself if the cart changes.
+2.	Expanded(child: ...): This is a layout trick. It tells the ListView to fill all the available space, pushing the "Total" Card to the bottom of the screen.
+3.	cart.items.isEmpty ? ... : ...: A ternary operator to show a message if the cart is empty.
+4.	ListTile: A perfect widget for showing items in a list.
+5.	trailing: ...: The trailing property puts widgets on the far-right of the ListTile.
+6.	onPressed: () => cart.removeItem(...): We wire up the delete button. When tapped, it calls removeItem, which calls notifyListeners(), which causes this screen to rebuild without the item. It all happens automatically!
+7.	Card(...): This is the summary card at the bottom. It simply reads the cart.totalPrice getter from our provider.
+
+Part E: Add Cart Icon to HomeScreen AppBar
+The final step! Let's add a cart icon to our HomeScreen that shows the item count and navigates to our new CartScreen.
+Step 6: Update home_screen.dart
+lib/screens/home_screen.dart - Part 1: Imports
+
+// ... (your existing imports)
+import 'package:ecommerce_app/providers/cart_provider.dart'; // 1. ADD THIS
+import 'package:ecommerce_app/screens/cart_screen.dart'; // 2. ADD THIS
+import 'package:provider/provider.dart'; // 3. ADD THIS
+
+lib/screens/home_screen.dart - Part 2: The build Method
+Find your AppBar's actions: [] list. We'll add a new widget at the beginning of the list.
+
+ @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_currentUser != null ? 'Welcome, ${_currentUser!.email}' : 'Home'),
+        actions: [
+          
+          // 1. --- ADD THIS NEW WIDGET ---
+          // This is a special, efficient way to use Provider
+          Consumer<CartProvider>(
+            // 2. The "builder" function rebuilds *only* the icon
+            builder: (context, cart, child) {
+              // 3. The "Badge" widget adds a small label
+              return Badge(
+                // 4. Get the count from the provider
+                label: Text(cart.itemCount.toString()),
+                // 5. Only show the badge if the count is > 0
+                isLabelVisible: cart.itemCount > 0,
+                // 6. This is the child (our icon button)
+                child: IconButton(
+                  icon: const Icon(Icons.shopping_cart),
+                  onPressed: () {
+                    // 7. Navigate to the CartScreen
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const CartScreen(),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+          
+          // ... (your existing 'admin' and 'logout' IconButtons)
+        ],
+      ),
+      // ... (your existing StreamBuilder body)
+    );
+  }
+}
+1.	Consumer<CartProvider>: This is another way to use Provider. It's more efficient than Provider.of because it only rebuilds the small widget inside its builder function when notifyListeners() is called, not the entire HomeScreen.
+2.	builder: (context, cart, child): This builder gives us an instance of our CartProvider, which we've named cart.
+3.	Badge: A simple, built-in widget that adds a small label on top of its child.
+4.	label: Text(cart.itemCount.toString()): We get the item count from our cart provider instance.
+5.	isLabelVisible: cart.itemCount > 0: A nice touch. This hides the badge (and the "0") if the cart is empty.
+6.	child: IconButton(...): The Badge wraps our IconButton.
+7.	onPressed: ...: We add the onPressed to the IconButton to navigate to our new CartScreen.
+ Expected Output
+1.	Full Restart your app. (flutter run).
+2.	Log in. You are on the Home Screen. You should see a new cart icon in the AppBar (with no badge).
+3.	Tap on a product. You go to the Detail Screen.
+4.	Tap the "Add to Cart" button. A SnackBar should appear ("Added to cart!").
+5.	Go back to the Home Screen. Your cart icon in the AppBar should now have a "1" badge on it!
+6.	Go to the detail page for the same product and tap "Add to Cart" again.
+7.	Go back to the Home Screen. The badge should now show "2".
+8.	Tap the cart icon in the AppBar.
+9.	You will be navigated to the Cart Screen.
+10.	You should see your item, with "Qty: 2", and the correct total price.
+11.	Tap the delete icon. The item will be removed from the list, and the "Total" at the bottom will update instantly.
+12.	Go back to the Home Screen. The cart badge should be gone.
+13.	Close and restart the app. The cart will be empty (because it's local state, which we'll fix next).
+

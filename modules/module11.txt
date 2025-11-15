@@ -1,0 +1,250 @@
+Module 11: Order History
+We'll build an "Order History" screen that lists all past orders for the logged-in user. This involves:
+1.	Adding the intl package to format the order dates.
+2.	Creating a new, reusable OrderCard widget to display each order's summary.
+3.	Querying our orders collection using a where() clause to filter by userId.
+4.	Adding a new icon to the HomeScreen's AppBar to navigate to this new screen.
+
+Part A: Add intl Package (for Date Formatting)
+Our createdAt field in Firestore is a Timestamp, which is not very readable. This package will let us easily format it (e.g., "11/06/2025 - 10:30 AM").
+In your android studio terminal, run:
+
+flutter pub add intl
+
+Part B: Create the OrderCard Widget
+Let's create a new reusable widget to keep our code clean.
+Step 1: Create the new file
+●	In your lib/widgets folder, create a new file: order_card.dart.
+
+Step 2: Build the OrderCard
+This will be a StatelessWidget that just displays the order data it's given.
+lib/widgets/order_card.dart - (New File)
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // 1. Import the intl package
+
+class OrderCard extends StatelessWidget {
+  // 2. We'll pass in the entire order data map
+  final Map<String, dynamic> orderData;
+
+  const OrderCard({super.key, required this.orderData});
+
+  @override
+  Widget build(BuildContext context) {
+    
+    // 3. Safely get the timestamp
+    final Timestamp? timestamp = orderData['createdAt'];
+    final String formattedDate;
+
+    if (timestamp != null) {
+      // 4. Use DateFormat to make it readable
+      //    (e.g., "11/06/2025 - 10:51 AM")
+      formattedDate = DateFormat('MM/dd/yyyy - hh:mm a')
+          .format(timestamp.toDate());
+    } else {
+      formattedDate = 'Date not available';
+    }
+
+    // 5. Use a Card for a nice UI
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 3,
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        // 6. Use a ListTile for clean, structured content
+        child: ListTile(
+          // 7. Title: Total Price
+          title: Text(
+            'Total: ₱${(orderData['totalPrice'] as double).toStringAsFixed(2)}',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+          ),
+          
+          // 8. Subtitle: Item count and Status
+          subtitle: Text(
+            'Items: ${orderData['itemCount']}\n'
+            'Status: ${orderData['status']}',
+          ),
+          
+          // 9. Trailing: The formatted date
+          trailing: Text(
+            formattedDate,
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+          
+          // 10. Allows the subtitle to have 2 lines
+          isThreeLine: true,
+        ),
+      ),
+    );
+  }
+}
+
+(Part B):
+1.	intl.dart: This import gives us the DateFormat class.
+2.	orderData: We'll pass in the Map for a single order from Firestore.
+3.	Timestamp?: We get the createdAt field. We make it nullable (?) just to be safe.
+4.	DateFormat(...): This is the magic from the intl package.
+○	timestamp.toDate(): Converts the Firestore Timestamp into a standard Dart DateTime object.
+○	DateFormat('...').format(...): Formats that DateTime into a readable string based on the pattern we provide.
+5.	ListTile: This is the perfect widget for displaying list items.
+6.	title / subtitle / trailing: We use these properties to neatly organize the order's information.
+7.	isThreeLine: true: This tells the ListTile to allocate a bit more height because our subtitle has two lines (using \n).
+
+Part C: Create the OrderHistoryScreen
+Now, let's build the new screen that will show a list of these OrderCards.
+Step 1: Create the new file
+●	In your lib/screens folder, create a new file: order_history_screen.dart.
+Step 2: Build the OrderHistoryScreen
+This screen will use a StreamBuilder to fetch only the current user's orders.
+lib/screens/order_history_screen.dart - (New File)
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:ecommerce_app/widgets/order_card.dart'; // 1. Import our new card
+
+class OrderHistoryScreen extends StatelessWidget {
+  const OrderHistoryScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 2. Get the current user
+    final User? user = FirebaseAuth.instance.currentUser;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Orders'),
+      ),
+      // 3. Check if the user is logged in
+      body: user == null
+          ? const Center(
+              child: Text('Please log in to see your orders.'),
+            )
+          // 4. If logged in, show the StreamBuilder
+          : StreamBuilder<QuerySnapshot>(
+              
+              // 5. --- THIS IS THE CRITICAL NEW QUERY ---
+              stream: FirebaseFirestore.instance
+                  .collection('orders')
+                  // 6. Filter the 'orders' collection
+                  .where('userId', isEqualTo: user.uid)
+                  // 7. Sort by date, newest first
+                  .orderBy('createdAt', descending: true)
+                  .snapshots(),
+              
+              builder: (context, snapshot) {
+                // 8. Handle loading state
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                
+                // 9. Handle error state
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                // 10. Handle no data (no orders)
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text('You have not placed any orders yet.'),
+                  );
+                }
+
+                // 11. We have data! Get the list of order documents
+                final orderDocs = snapshot.data!.docs;
+
+                // 12. Use ListView.builder to show the list
+                return ListView.builder(
+                  itemCount: orderDocs.length,
+                  itemBuilder: (context, index) {
+                    // 13. Get the data for a single order
+                    final orderData = orderDocs[index].data() as Map<String, dynamic>;
+                    
+                    // 14. Return our custom OrderCard widget
+                    return OrderCard(orderData: orderData);
+                  },
+                );
+              },
+            ),
+    );
+  }
+}
+
+
+(Part C):
+1.	Import OrderCard: We import the widget we just created.
+2.	final User? user = ...: We get the currently logged-in user.
+3.	user == null ? ... : ...: We first check if a user is logged in. If not, we don't try to query the database.
+4.	StreamBuilder<QuerySnapshot>: Just like on the HomeScreen, we use a StreamBuilder to get real-time data.
+5.	The Query: This is the most important part of the module.
+6.	.where('userId', isEqualTo: user.uid): This is our new query command. It tells Firestore: "Only give me documents from the orders collection where the userId field is exactly equal to our currently logged-in user's ID."
+7.	.orderBy('createdAt', descending: true): This sorts the orders, showing the most recent ones at the top.
+8.	Steps 8-10: We handle all the different states: loading, error, and empty (no orders).
+9.	ListView.builder: We build a list of our new OrderCard widgets, passing in the orderData map for each one.
+
+Part D: Add Navigation from HomeScreen
+The final step is to add a button to the HomeScreen's AppBar to let users get to this new screen.
+lib/screens/home_screen.dart - Part 1: Imports
+
+// ... (your existing imports)
+import 'package:ecommerce_app/screens/order_history_screen.dart'; // 1. ADD THIS
+
+lib/screens/home_screen.dart - Part 2: The build Method
+Find the actions: [] list in your Scaffold's AppBar. Add a new IconButton (I recommend placing it between the cart and admin icons).
+
+ @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_currentUser != null ? 'Welcome, ${_currentUser!.email}' : 'Home'),
+        actions: [
+          
+          // 1. Your existing Cart Icon
+          Consumer<CartProvider>(
+            // ... (your existing cart badge)
+          ),
+          
+          // 2. --- ADD THIS NEW BUTTON ---
+          IconButton(
+            icon: const Icon(Icons.receipt_long), // A "receipt" icon
+            tooltip: 'My Orders',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const OrderHistoryScreen(),
+                ),
+              );
+            },
+          ),
+          
+          // 3. Your existing Admin Icon (if admin)
+          if (_userRole == 'admin')
+            IconButton(
+              // ... (your existing admin button)
+            ),
+          
+          // 4. Your existing Logout Icon
+          IconButton(
+            // ... (your existing logout button)
+          ),
+        ],
+      ),
+      // ... (body is the same)
+    );
+  }
+
+(Part D):
+●	IconButton: We add a new button. Icons.receipt_long is a great icon for "order history."
+●	onPressed: ...: We use a standard Navigator.push to send the user to our new OrderHistoryScreen.
+
+Expected Output
+1.	Full Restart your app.
+2.	Log in. On the Home Screen, you should now see the new "My Orders" (receipt) icon in the AppBar.
+3.	Tap the new icon.
+4.	You will be navigated to the "My Orders" screen.
+5.	If you have not placed any orders, you will see the message "You have not placed any orders yet."
+6.	If you have placed orders (from Module 10), you will see a list of OrderCards.
+7.	Each card will show the correct Total Price, Item Count, Status ("Pending"), and the formatted date and time that you placed the order.
+8.	The most recent order will be at the top of the list.
+

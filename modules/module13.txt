@@ -1,0 +1,326 @@
+In this module, we'll make our app more professional by creating a dedicated ProfileScreen. We will:
+1.	Remove the "Logout" icon from the HomeScreen's AppBar.
+2.	Add a new "Profile" icon in its place.
+3.	Create a new ProfileScreen that this icon navigates to.
+4.	On this new screen, we'll show the user's email, add the "Logout" button, and build a form for them to change their password using Firebase Auth's updatePassword feature.
+
+Part A: Update home_screen.dart
+Let's change the AppBar to have the new "Profile" icon.
+lib/screens/home_screen.dart - Part 1: Imports
+Add this import at the top of your home_screen.dart file. We'll create this new screen in a moment.
+
+// ... (your existing imports)
+import 'package:ecommerce_app/screens/profile_screen.dart'; // 1. ADD THIS
+
+lib/screens/home_screen.dart - Part 2: The build Method
+Find your AppBar's actions: [] list. We are going to DELETE the "Logout" button and REPLACE it with our new "Profile" button.
+
+ @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        // 1. We'll update this title later in the "Branding" module
+        title: Text(_currentUser != null ? 'Welcome, ${_currentUser!.email}' : 'Home'),
+        actions: [
+          
+          // 2. Your existing Cart Icon (Unchanged)
+          Consumer<CartProvider>(
+            // ... (your existing cart badge)
+          ),
+          
+          // 3. Your existing "My Orders" Icon (Unchanged)
+          IconButton(
+            icon: const Icon(Icons.receipt_long),
+            tooltip: 'My Orders',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const OrderHistoryScreen(),
+                ),
+              );
+            },
+          ),
+          
+          // 4. Your existing Admin Icon (Unchanged)
+          if (_userRole == 'admin')
+            IconButton(
+              // ... (your existing admin button)
+            ),
+          
+          // 5. --- THIS IS THE CHANGE ---
+          //    DELETE the old "Logout" IconButton
+          /*
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: _signOut, // We are deleting this
+          ),
+          */
+
+          // 6. ADD this new "Profile" IconButton
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            tooltip: 'Profile',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const ProfileScreen(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      // ... (body is the same)
+    );
+  }
+
+(Part A):
+●	We've simply replaced the Icons.logout button with an Icons.person_outline button.
+●	The onPressed now uses Navigator.push to send the user to our new ProfileScreen.
+●	We also no longer need the _signOut() function in this file, so you can delete it from your _HomeScreenState.
+
+Part B: Create the ProfileScreen
+This is our new screen. It will be a StatefulWidget because we need to manage the "Change Password" form fields and a loading spinner.
+Step 1: Create the new file
+●	In your lib/screens folder, create a new file: profile_screen.dart.
+Step 2: Build the ProfileScreen (State & Logic)
+lib/screens/profile_screen.dart - Part 1: Imports & State Definition
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  // 1. Get Firebase instances
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final User? _currentUser = FirebaseAuth.instance.currentUser;
+
+  // 2. Form key and controllers for changing password
+  final _formKey = GlobalKey<FormState>();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  // 3. State variable for loading
+  bool _isLoading = false;
+
+  // 4. Clean up controllers
+  @override
+  void dispose() {
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  // The logic functions will go here next...
+
+(Part B, Step 2):
+●	We get the _currentUser so we can display their email.
+●	We create a _formKey and two TextEditingControllers, just like we did for the SignUpScreen, to manage the new password form.
+●	_isLoading will control our "Change Password" button's spinner.
+lib/screens/profile_screen.dart - Part 2: "Logout" & "Change Password" Logic
+Add these two functions inside your _ProfileScreenState class.
+
+ // ... (inside _ProfileScreenState)
+
+  // 1. This is the "Change Password" logic
+  Future<void> _changePassword() async {
+    // 2. Validate the form
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 3. This is the Firebase command to update the password
+      await _currentUser!.updatePassword(_newPasswordController.text);
+
+      // 4. Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password changed successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      // Clear the fields
+      _formKey.currentState!.reset();
+      _newPasswordController.clear();
+      _confirmPasswordController.clear();
+
+    } on FirebaseAuthException catch (e) {
+      // 5. Handle errors
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to change password: ${e.message}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      print("Error changing password: ${e.code}");
+      // e.code 'requires-recent-login' is a common error
+      // This means the user's token is old.
+      // You can prompt them to log out and log back in.
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // 6. This is the "Logout" logic
+  Future<void> _signOut() async {
+    // This will be heard by the AuthWrapper, which will
+    // automatically navigate the user to the LoginScreen.
+    await _auth.signOut();
+  }
+
+(Part B, Step 2):
+1.	_changePassword(): This is our new function.
+2.	_formKey.currentState!.validate(): We'll add validators to our form to make sure passwords match and aren't empty.
+3.	_currentUser!.updatePassword(...): This is the built-in Firebase Auth command. It takes the new password string and updates it.
+4.	Error Handling (FirebaseAuthException): This is important. If a user has been logged in for a long time, Firebase (for security) will reject this request with the error requires-recent-login. A professional app would catch this, log the user out, and ask them to log back in before changing their password. For our course, we'll just show the error.
+5.	_signOut(): This is the same logic we used to have on the HomeScreen. When called, our AuthWrapper will hear it and automatically show the LoginScreen.
+lib/screens/profile_screen.dart - Part 3: The build Method (UI)
+Finally, add the build method inside your _ProfileScreenState class.
+
+ @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Profile'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 1. User Info Section
+            Text(
+              'Logged in as:',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            Text(
+              _currentUser?.email ?? 'Not logged in',
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 24),
+            const Divider(),
+            const SizedBox(height: 16),
+
+            // 2. Change Password Form
+            Text(
+              'Change Password',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  // 3. New Password Field
+                  TextFormField(
+                    controller: _newPasswordController,
+                    obscureText: true,
+                    decoration:
+                        const InputDecoration(labelText: 'New Password'),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter a password';
+                      }
+                      if (value.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  // 4. Confirm Password Field
+                  TextFormField(
+                    controller: _confirmPasswordController,
+                    obscureText: true,
+                    decoration:
+                        const InputDecoration(labelText: 'Confirm Password'),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please confirm your password';
+                      }
+                      // 5. Check if it matches the other field
+                      if (value != _newPasswordController.text) {
+                        return 'Passwords do not match';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // 6. "Change Password" Button
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              onPressed: _isLoading ? null : _changePassword,
+              child: _isLoading
+                  ? const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    )
+                  : const Text('Change Password'),
+            ),
+            
+            const SizedBox(height: 40),
+            const Divider(),
+            const SizedBox(height: 20),
+
+            // 7. The "Logout" Button
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red[700], // Make it red
+              ),
+              onPressed: _signOut,
+              child: const Text('Log Out'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+
+(Part B, Step 3):
+1.	User Info: We display the _currentUser.email at the top of the screen.
+2.	Form: We create a Form with our _formKey.
+3.	Password Fields: We add two TextFormFields, just like in SignUpScreen.
+4.	Confirm Validator: This is a key piece of logic. The validator for the "Confirm Password" field checks if its value is not equal to _newPasswordController.text. This is how you do password matching.
+5.	Buttons: We add our "Change Password" button (with the _isLoading logic) and our "Log Out" button, which we've styled red to be clear.
+
+ Expected Output
+1.	Full Restart your app.
+2.	Log in. On the HomeScreen AppBar, the "Logout" icon is gone.
+3.	A new "Profile" icon (a person) is now visible.
+4.	Tap the "Profile" icon.
+5.	You are navigated to the new "Profile" screen.
+6.	At the top, you will see "Logged in as: [your-email@domain.com]".
+7.	Try the "Change Password" form:
+○	Try to submit with empty fields. The validation errors will appear.
+○	Try to submit with two different passwords. The "Passwords do not match" error will appear.
+○	Enter a new, valid password (e.g., "newpass123") in both fields and tap "Change Password".
+○	The button will show a spinner, and then a green "Password changed successfully!" snackbar will appear.
+8.	Scroll to the bottom and tap the red "Log Out" button.
+9.	You will be instantly navigated back to the Login Screen.
+10.	Try logging in with your old password. It will fail.
+11.	Log in with your new password (e.g., "newpass123"). It will work.
+

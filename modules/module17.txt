@@ -1,0 +1,358 @@
+This module will involve creating a new collection in Firestore and a new screen for the user.
+The logic will be:
+1.	Trigger: When an Admin updates an order's status (in admin_order_screen.dart), we'll also create a new document in a new notifications collection.
+2.	Display: We'll add a "Bell" icon to the HomeScreen AppBar.
+3.	Badge: This "Bell" icon will query Firestore to see if there are any unread notifications and show a "new" badge.
+4.	Screen: Tapping the bell will open a new NotificationsScreen, which lists all the user's notifications (e.g., "Your order has been shipped!").
+
+Part A: Create a NotificationIcon Widget
+This is the cleanest way to handle this. We'll create a new, separate widget whose only job is to be the "Bell" icon, check for new notifications, and show a badge.
+Step 1: Create the new file
+●	In your lib/widgets folder, create a new file: notification_icon.dart.
+Step 2: Build the NotificationIcon
+This widget will have its own StreamBuilder that just checks for unread notifications.
+lib/widgets/notification_icon.dart - (New File)
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ecommerce_app/screens/notifications_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+class NotificationIcon extends StatelessWidget {
+  const NotificationIcon({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final User? user = FirebaseAuth.instance.currentUser;
+
+    // 1. If no user, show an empty box
+    if (user == null) {
+      return const SizedBox();
+    }
+
+    // 2. This StreamBuilder's only job is to check for unread notifications
+    return StreamBuilder<QuerySnapshot>(
+      // 3. The Query:
+      stream: FirebaseFirestore.instance
+          .collection('notifications')
+          .where('userId', isEqualTo: user.uid)
+          .where('isRead', isEqualTo: false) // 4. Only get UNREAD
+          .snapshots(),
+      
+      builder: (context, snapshot) {
+        // 5. We don't care about loading/error, just the data
+        bool hasUnread = snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+
+        // 6. The Badge widget
+        return Badge(
+          // 7. Show a small red dot if 'hasUnread' is true
+          isLabelVisible: hasUnread,
+          // 8. The icon button itself
+          child: IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            tooltip: 'Notifications',
+            onPressed: () {
+              // 9. Navigate to the new NotificationsScreen
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const NotificationsScreen(),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+(Part A):
+1.	StreamBuilder<QuerySnapshot>: We create a small, efficient StreamBuilder that just lives on this icon.
+2.	The Query: This is a compound query. It gets documents from notifications where the userId matches AND isRead is false.
+3.	Heads Up! Firebase Index: This query will require a new Firestore Index. Just like in Module 11, when you first run this, you will see a red error in your console with a link. Click the link to create the index.
+4.	Badge: This is a great, simple widget. We set isLabelVisible to true (which shows a red dot) only if our query finds one or more documents.
+5.	onPressed: Tapping the icon will navigate to NotificationsScreen, which we'll create next.
+
+Create the NotificationsScreen
+This new screen will list all notifications (newest first) and will automatically mark them as "read" when the user opens it.
+Step 1: Create the new file
+●	In lib/screens, create a new file: notifications_screen.dart.
+Step 2: Build the NotificationsScreen
+This needs to be a StatefulWidget so we can run logic (_markAsRead) when the screen is built.
+lib/screens/notifications_screen.dart - (New File)
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart'; // For formatting the date
+
+class NotificationsScreen extends StatefulWidget {
+  const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  final User? _user = FirebaseAuth.instance.currentUser;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // 1. This function will mark all unread notifications as "read"
+  void _markNotificationsAsRead(List<QueryDocumentSnapshot> docs) {
+    // 2. Use a "WriteBatch" to update multiple documents at once
+    final batch = _firestore.batch();
+    
+    for (var doc in docs) {
+      if (doc['isRead'] == false) {
+        // 3. If it's unread, add an "update" operation to the batch
+        batch.update(doc.reference, {'isRead': true});
+      }
+    }
+    
+    // 4. "Commit" the batch, sending all updates to Firestore
+    batch.commit();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Notifications'),
+      ),
+      body: _user == null
+          ? const Center(child: Text('Please log in.'))
+          : StreamBuilder<QuerySnapshot>(
+              // 5. Get ALL notifications for this user, newest first
+              stream: _firestore
+                  .collection('notifications')
+                  .where('userId', isEqualTo: _user!.uid)
+                  .orderBy('createdAt', descending: true)
+                  .snapshots(),
+              
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('You have no notifications.'));
+                }
+
+                final docs = snapshot.data!.docs;
+                
+                // 6. --- IMPORTANT ---
+                //    As soon as we have the notifications,
+                //    we call our function to mark them as read.
+                _markNotificationsAsRead(docs);
+
+                return ListView.builder(
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data() as Map<String, dynamic>;
+                    final timestamp = (data['createdAt'] as Timestamp?);
+                    final formattedDate = timestamp != null
+                        ? DateFormat('MM/dd/yy hh:mm a').format(timestamp.toDate())
+                        : '';
+                    
+                    // 7. Check if this notification was *just* read
+                    final bool wasUnread = data['isRead'] == false;
+
+                    return ListTile(
+                      // 8. Show a "new" icon if it was unread
+                      leading: wasUnread
+                          ? const Icon(Icons.circle, color: Colors.deepPurple, size: 12)
+                          : const Icon(Icons.circle_outlined, color: Colors.grey, size: 12),
+                      title: Text(
+                        data['title'] ?? 'No Title',
+                        style: TextStyle(
+                          fontWeight: wasUnread ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${data['body'] ?? ''}\n$formattedDate',
+                      ),
+                      isThreeLine: true,
+                    );
+                  },
+                );
+              },
+            ),
+    );
+  }
+}
+
+
+
+
+(Part B):
+1.	_markNotificationsAsRead(...): This is our new helper function.
+2.	_firestore.batch(): This is a powerful tool. Instead of sending 10 separate update requests (which is slow and inefficient), a WriteBatch groups them all into one single request to the database.
+3.	batch.update(...): We add an update operation to the batch for each unread document.
+4.	batch.commit(): This executes all the updates at once.
+5.	StreamBuilder Query: This query gets all notifications (read and unread) so we can display them in a list.
+6.	Calling _markNotificationsAsRead(docs): We call this function inside the builder. As soon as the StreamBuilder gets the list of documents, we immediately tell Firestore to mark them as "read."
+7.	wasUnread: We check the isRead status before it gets updated to add some special styling (bold text, solid icon). Because the StreamBuilder will re-run after the batch.commit(), this bold styling will only appear for a split second, and then all items will look "read." This is the desired effect!
+
+Part C: Update home_screen.dart (Add the Icon)
+This is the easiest step. We just add our new NotificationIcon widget to the AppBar.
+lib/screens/home_screen.dart - Part 1: Imports
+// ... (your existing imports)
+import 'package:ecommerce_app/widgets/notification_icon.dart'; // 1. ADD THIS
+
+lib/screens/home_screen.dart - Part 2: The build Method
+Find your AppBar's actions: [] list. Add the NotificationIcon() widget. I'll place it right after the Cart icon.
+
+ @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        // ... (title)
+        actions: [
+          
+          // 1. Cart Icon (Unchanged)
+          Consumer<CartProvider>(
+            // ... (your existing cart badge)
+          ),
+
+          // 2. --- ADD OUR NEW WIDGET ---
+          const NotificationIcon(),
+          // --- END OF NEW WIDGET ---
+          
+          // 3. "My Orders" Icon (Unchanged)
+          IconButton(
+            // ... (your existing orders button)
+          ),
+          
+          // 4. Admin Icon (Unchanged)
+          if (_userRole == 'admin')
+            IconButton(
+              // ... (your existing admin button)
+            ),
+          
+          // 5. Profile Icon (Unchanged)
+          IconButton(
+            // ... (your existing profile button)
+          ),
+        ],
+      ),
+      // ... (body is the same)
+    );
+  }
+}
+
+(Part C):
+●	We just add const NotificationIcon(), to our actions list. All the logic (fetching data, showing the badge, navigating) is handled inside that widget. This is very clean!
+
+Part D: Update admin_order_screen.dart (The Trigger)
+Finally, we need to create the notification when the admin updates an order.
+lib/screens/admin_order_screen.dart - Part 1: The _updateOrderStatus Function
+Find your _updateOrderStatus function. We need it to accept the userId so it knows who to send the notification to.
+
+ // ... (inside _AdminOrderScreenState)
+
+  // 1. MODIFY this function to accept userId
+  Future<void> _updateOrderStatus(String orderId, String newStatus, String userId) async {
+    try {
+      // 2. This part is the same (update the order)
+      await _firestore.collection('orders').doc(orderId).update({
+        'status': newStatus,
+      });
+
+      // 3. --- ADD THIS NEW LOGIC ---
+      //    Create a new notification document
+      await _firestore.collection('notifications').add({
+        'userId': userId, // 4. The user this notification is for
+        'title': 'Order Status Updated',
+        'body': 'Your order ($orderId) has been updated to "$newStatus".',
+        'orderId': orderId,
+        'createdAt': FieldValue.serverTimestamp(),
+        'isRead': false, // 5. Mark it as unread
+      });
+      // --- END OF NEW LOGIC ---
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Order status updated!')),
+      );
+    } catch (e) {
+      // ... (error handling is the same)
+    }
+  }
+
+(Part D, Step 1):
+1.	We added String userId as a parameter.
+2.	_firestore.collection('notifications').add(...): After successfully updating the order, we create a new document in our notifications collection.
+3.	We save the userId so our query in NotificationIcon can find it.
+4.	We save isRead: false, which will trigger the "new" badge on the user's HomeScreen.
+lib/screens/admin_order_screen.dart - Part 2: Update Dialog Functions
+Now we just need to pass the userId to the functions that call _updateOrderStatus.
+
+ // 1. MODIFY this function to accept userId
+  void _showStatusDialog(String orderId, String currentStatus, String userId) {
+    showDialog(
+      context: context, 
+      builder: (dialogContext) { 
+        // ... (statuses list is the same)
+        
+        return AlertDialog(
+          // ... (title, content, etc. is the same)
+          children: statuses.map((status) {
+              return ListTile(
+                // ... (title, trailing)
+                onTap: () {
+                  // 2. PASS userId to our update function
+                  _updateOrderStatus(orderId, status, userId); 
+                  Navigator.of(dialogContext).pop();
+                },
+              );
+            }).toList(),
+          // ... (actions are the same)
+        );
+      },
+    );
+  }
+  
+  // ... (inside the build method)
+  @override
+  Widget build(BuildContext context) {
+    // ... (inside the StreamBuilder's ListView.builder)
+    
+              // ... (getting orderData, timestamp, status, etc.)
+              final String userId = orderData['userId'] ?? 'Unknown User';
+
+              return Card(
+                // ... (ListTile, etc.)
+                onTap: () {
+                  // 3. PASS userId from the order data to our dialog
+                  _showStatusDialog(order.id, status, userId);
+                },
+              );
+    // ...
+  }
+
+(Part D, Step 2):
+●	We just "bubbled up" the userId variable.
+●	The ListView.builder reads the userId from the orderData.
+●	It passes the userId to _showStatusDialog.
+●	_showStatusDialog passes the userId to _updateOrderStatus.
+●	_updateOrderStatus uses the userId to create the notification.
+
+Expected Output
+1.	Full Restart your app.
+2.	Log in as a regular user. You will now see a "Bell" icon in your AppBar. It will have no badge.
+3.	Tap the bell. You'll go to the "Notifications" screen, which will say "You have no notifications."
+4.	Log out.
+5.	Log in as your "Admin" user.
+6.	Go to the Admin Panel -> "Manage Orders".
+7.	Tap on any "Pending" order. The status dialog will pop up.
+8.	Tap on "Shipped". The dialog will close, and the order status will update.
+9.	Log out.
+10.	Log back in as the REGULAR USER (the user who placed that order).
+11.	Instantly, you should see a red dot badge on the "Bell" icon in the AppBar.
+12.	Tap the "Bell" icon.
+13.	You will be navigated to the "Notifications" screen. You will see one new notification, in bold text:
+○	Order Status Updated
+○	Your order (aBcXyZ...) has been updated to "Shipped".
+○	[Date]
+14.	The notification will be bold for a split second, then turn to normal text (as it's marked "read").
+15.	Tap the back button to go to the HomeScreen.
+16.	The red dot on the "Bell" icon will now be gone (because the notification is no longer "unread").
+

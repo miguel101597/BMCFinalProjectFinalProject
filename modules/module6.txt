@@ -1,0 +1,234 @@
+In this module, we'll replace the static "This is the Home Screen" text with a dynamic, real-time grid of products. We'll fetch the product list from your products collection in Firestore.
+The best part? We'll use a StreamBuilder, which automatically listens for changes. When you add a new product in the Admin Panel, it will instantly appear on the HomeScreen for all users—no refresh needed!
+To keep our code clean, we'll first build a new reusable widget called ProductCard to display each product.
+Part A: Create a Reusable ProductCard Widget
+We'll create a new widget whose only job is to display a single product's image, name, and price.
+Step 1: Create the new file
+●	In your lib folder, create a new folder named widgets.
+●	Inside lib/widgets, create a new file: product_card.dart.
+Step 2: Build the ProductCard
+This will be a StatelessWidget because it just receives data and displays it.
+lib/widgets/product_card.dart - Part 1: Imports & Class Definition
+
+import 'package:flutter/material.dart';
+
+// 1. This is a simple StatelessWidget
+class ProductCard extends StatelessWidget {
+  
+  // 2. We'll require the data we need to display
+  final String productName;
+  final double price;
+  final String imageUrl;
+
+  // 3. The constructor takes this data
+  const ProductCard({
+    super.key,
+    required this.productName,
+    required this.price,
+    required this.imageUrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // The UI will go here next
+    return Container(); // Placeholder
+  }
+}
+●	StatelessWidget: We use this because the card itself doesn't need to change (it just displays whatever data it's given).
+●	final String...: We define the properties our widget must receive to build itself.
+●	const ProductCard(...): The constructor uses required to ensure we can't create a card without a name, price, or image.
+
+lib/widgets/product_card.dart - Part 2: The build Method (UI)
+Now, let's build the UI. Replace the return Container(); with this:
+
+ @override
+  Widget build(BuildContext context) {
+    // 1. A Card widget gives us a nice shadow and rounded corners
+    return Card(
+      elevation: 3,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 2. This is for the Image
+          Expanded(
+            child: Image.network(
+              imageUrl, // 3. This loads the image from the URL!
+              fit: BoxFit.cover, // 4. This makes the image fill its box
+              
+              // 5. Show a loading spinner while the image downloads
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return const Center(child: CircularProgressIndicator());
+              },
+              
+              // 6. Show an error icon if the URL is bad
+              errorBuilder: (context, error, stackTrace) {
+                return const Center(
+                  child: Icon(Icons.broken_image, size: 40, color: Colors.grey),
+                );
+              },
+            ),
+          ),
+
+          // 7. A container for the text, with padding
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 8. The Product Name
+                Text(
+                  productName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                  maxLines: 1, // 9. Only one line
+                  overflow: TextOverflow.ellipsis, // 10. Show "..." if too long
+                ),
+                const SizedBox(height: 4),
+
+                // 11. The Price
+                Text(
+                  // 12. Format the number to 2 decimal places
+                  '₱${price.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[700],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+1.	Card: A Material Design widget that creates a container with a shadow.
+2.	Expanded: This tells the Image to fill all the available vertical space in the Column, pushing the text to the bottom.
+3.	Image.network(imageUrl): This is the magic! It's the widget that loads an image from a URL, which is exactly what we saved in Firestore (e.g., http://...).
+4.	fit: BoxFit.cover: This scales the image to fill the container, which looks much better than just fitting it inside.
+5.	loadingBuilder: This provides a better user experience. It shows a CircularProgressIndicator while the image is being downloaded.
+6.	errorBuilder: If the image URL is broken or the user is offline, this shows a "broken image" icon instead of a red error screen.
+7.	Padding: Adds some space around the text.
+8.	productName: We display the name in bold.
+9.	maxLines: 1: Prevents product names from being too long.
+10.	overflow: TextOverflow.ellipsis: If the name is too long, it will be cut off with a "..."
+11.	price: We display the price.
+12.	'₱${price.toStringAsFixed(2)}': This is string formatting. price is a double (e.g., 500.0). toStringAsFixed(2) converts it to a string with two decimal places (e.g., "500.00"). We add the "₱" (Peso) sign in front.
+
+Part B: Update home_screen.dart to Show Products
+Now we'll use our new ProductCard and the StreamBuilder to display all the products from Firestore.
+lib/screens/home_screen.dart - Part 1: Imports
+Make sure these imports are at the top of your home_screen.dart file.
+
+// ... (your existing imports for firebase_auth, cloud_firestore, etc.)
+import 'package:ecommerce_app/widgets/product_card.dart'; // 1. ADD THIS IMPORT
+
+lib/screens/home_screen.dart - Part 2: The build Method
+We are going to replace the body of your Scaffold. Find the body: Center(...) and replace it with this:
+
+
+
+ @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        // ... (your existing AppBar code is fine)
+      ),
+
+      // 1. REPLACE THE OLD "body: Center(...)" WITH THIS:
+      body: StreamBuilder<QuerySnapshot>(
+        
+        // 2. This is our query to Firestore
+        stream: FirebaseFirestore.instance
+            .collection('products')
+            .orderBy('createdAt', descending: true) // 3. Show newest first
+            .snapshots(),
+            
+        // 4. The builder runs every time new data arrives from the stream
+        builder: (context, snapshot) {
+          
+          // 5. STATE 1: While data is loading
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          
+          // 6. STATE 2: If an error occurs
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          // 7. STATE 3: If there's no data (or no products)
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(
+              child: Text('No products found. Add some in the Admin Panel!'),
+            );
+          }
+
+          // 8. STATE 4: We have data!
+          // Get the list of product documents from the snapshot
+          final products = snapshot.data!.docs;
+
+          // 9. Use GridView.builder for a 2-column grid
+          return GridView.builder(
+            padding: const EdgeInsets.all(10.0),
+            
+            // 10. This configures the grid
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2, // 2 columns
+              crossAxisSpacing: 10, // Horizontal space between cards
+              mainAxisSpacing: 10, // Vertical space between cards
+              childAspectRatio: 3 / 4, // Makes cards taller than wide
+            ),
+            
+            itemCount: products.length,
+            itemBuilder: (context, index) {
+              // 11. Get the data for one product
+              final productDoc = products[index];
+              final productData = productDoc.data() as Map<String, dynamic>;
+              
+              // 12. Return our custom ProductCard widget!
+              return ProductCard(
+                productName: productData['name'],
+                price: productData['price'],
+                imageUrl: productData['imageUrl'],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+1.	body: StreamBuilder<QuerySnapshot>: We're telling Flutter that the body of our screen will be built by a StreamBuilder that listens to a Firestore QuerySnapshot.
+2.	stream: ...: This is the most important property.
+○	FirebaseFirestore.instance.collection('products'): This targets our products collection.
+○	.orderBy('createdAt', descending: true): This sorts the products, so the newest ones you add appear at the top of the list.
+○	.snapshots(): This returns a Stream. It sends an initial list of all products, and then automatically sends a new list every time a product is added, changed, or removed.
+3.	builder: (context, snapshot): This function re-runs every time the stream sends new data. The snapshot object contains that data.
+4.	if (snapshot.connectionState == ...): This is how we handle loading. While the stream is "waiting" for the first batch of data, we show a spinner.
+5.	if (snapshot.hasError): If something goes wrong (e.g., you're offline), we show an error message.
+6.	if (!snapshot.hasData ...): This checks if the stream has data, but the docs list is empty (meaning, no products in the database).
+7.	final products = ...: If we pass all those checks, we know we have data. We get the list of documents.
+8.	GridView.builder: This is the best widget for an e-commerce app. It builds a grid of items.
+9.	gridDelegate: This property controls the layout of the grid.
+○	crossAxisCount: 2: This creates our 2-column layout.
+○	childAspectRatio: 3 / 4: This makes our cards taller than they are wide. You can play with this ratio.
+10.	itemBuilder: This function is called for every item in our products list.
+11.	productData = ... as Map: The data from Firestore (productDoc.data()) is an Object?. We must cast it as Map<String, dynamic> so Dart knows how to read it.
+12.	return ProductCard(...): For each product in our list, we create and return our new ProductCard widget, passing in the name, price, and imageUrl from the Firestore data.
+
+Expected Output
+1.	Full Restart your app.
+2.	Log in as any user.
+3.	You will land on the HomeScreen. The body will show a loading spinner for a second.
+4.	If you have no products in your database, you will see the message: "No products found. Add some in the Admin Panel!"
+5.	Now, log in as your "admin" user.
+6.	Go to the Admin Panel (using the icon in the AppBar).
+7.	Add a new product. (Find an image on Google, right-click, "Copy Image Address", and paste that into the "Image URL" field).
+8.	Tap "Upload Product". Wait for the success message.
+9.	Tap the back button to return to the HomeScreen.
+10.	Instantly (or after a second), your new product will appear in a grid!
+11.	The ProductCard will show the image you linked, the product name, and the price (e.g., ₱500.00).
+

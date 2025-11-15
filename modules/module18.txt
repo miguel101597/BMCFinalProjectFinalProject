@@ -1,0 +1,546 @@
+This module that adds a professional, real-time chat feature and fixes a key bug. We will build a chat system where users and admins can message each other. Instead of using the "Bell" icon, we will add unread message counts directly to the chat icons. We'll also fix the "stuck screen" bug on the logout button.
+Part A: Fix the "Logout" Bug (on ProfileScreen)
+This is a "stuck screen" bug. When you tap "Logout," the AuthWrapper (underneath) correctly changes to the LoginScreen, but you are left staring at the ProfileScreen which is still on top of the navigation stack.
+The Fix: We'll update the _signOut function in profile_screen.dart to both sign out and manually clear the navigation stack.
+lib/screens/profile_screen.dart - (Update)
+Find your _signOut function (which you created in Module 13) and replace it with this new version:
+
+ // ... (inside _ProfileScreenState)
+
+  // 1. --- THIS IS THE LOGOUT BUTTON FIX ---
+  Future<void> _signOut() async {
+    // 2. Get the Navigator *before* the async call
+    //    (This avoids a "don't use BuildContext" warning)
+    final navigator = Navigator.of(context);
+    
+    // 3. This is your existing code
+    await _auth.signOut();
+    
+    // 4. --- THIS IS THE FIX ---
+    //    After signing out, pop all screens until we are
+    //    back at the very first screen (which is our AuthWrapper).
+    //    The AuthWrapper will then correctly show the LoginScreen.
+    navigator.popUntil((route) => route.isFirst);
+  }
+
+(Part A):
+●	navigator.popUntil((route) => route.isFirst): This is the fix. It tells Flutter, "Go back, and keep going back, until you get to the very first screen you launched." For our app, that first screen is the AuthWrapper, which will now correctly show the LoginScreen.
+
+Part B: Build the Chat UI (ChatBubble)
+This widget displays a single message, aligned left or right.
+Step 1: Create lib/widgets/chat_bubble.dart (New File)
+●	In your lib/widgets folder, create this new file.
+
+import 'package:flutter/material.dart';
+class ChatBubble extends StatelessWidget {
+  final String message;
+  final bool isCurrentUser;
+
+  const ChatBubble({
+    super.key,
+    required this.message,
+    required this.isCurrentUser,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      // 1. Align right if I'm the sender, left if I'm not
+      alignment: isCurrentUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.7,
+        ),
+        padding: const EdgeInsets.all(12),
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        // 2. Different color for me vs. them
+        decoration: BoxDecoration(
+          color: isCurrentUser ? Colors.deepPurple[400] : Colors.grey[200],
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Text(
+          message,
+          style: TextStyle(
+            color: isCurrentUser ? Colors.white : Colors.black87,
+            fontSize: 16,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+(Part B):
+●	isCurrentUser: This boolean is the key. It controls the alignment and color of the bubble.
+
+Part C: Build the ChatScreen (Logic & UI)
+This is the main screen where users and admins will talk. It will contain all the new logic for unread counts and marking messages as read.
+Step 1: Create lib/screens/chat_screen.dart (New File)
+●	In your lib/screens folder, create this new file.
+lib/screens/chat_screen.dart - Part 1: Imports & State Definition
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ecommerce_app/widgets/chat_bubble.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+class ChatScreen extends StatefulWidget {
+  // 1. This is the "chat room ID". It's just the user's ID.
+  final String chatRoomId; 
+  // 2. This is for the AppBar title (e.g., "Chat with user@example.com")
+  final String? userName; 
+
+  const ChatScreen({
+    super.key,
+    required this.chatRoomId,
+    this.userName,
+  });
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  // 3. Get Firebase instances
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  // 4. Controllers
+  final TextEditingController _messageController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  
+  // The logic and UI will go here next...
+
+ (Part C, Step 1):
+●	chatRoomId: This is the key. To make a 1-on-1 chat, we create a "chat room" document in Firestore using the user's ID. Both the user and the admin will read/write to this same document.
+●	_scrollController: We'll use this to make the chat list automatically scroll to the bottom.
+lib/screens/chat_screen.dart - Part 2: "Mark as Read" Logic
+We need to reset the unread counter as soon as the user opens the chat. We do this in initState.
+
+ // ... (inside _ChatScreenState)
+  
+  // 1. This function runs ONCE when the screen is loaded
+  @override
+  void initState() {
+    super.initState();
+    _markMessagesAsRead();
+  }
+
+  Future<void> _markMessagesAsRead() async {
+    final User? currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+    
+    // 2. We need to know which counter to reset
+    // 3. If I am the USER opening this chat:
+    if (currentUser.uid == widget.chatRoomId) {
+      await _firestore.collection('chats').doc(widget.chatRoomId).set({
+        'unreadByUserCount': 0, // Reset the user's count
+      }, SetOptions(merge: true)); // 'merge: true' creates the doc if it doesn't exist
+    } 
+    // 4. If I am the ADMIN opening this chat:
+    else { 
+      await _firestore.collection('chats').doc(widget.chatRoomId).set({
+        'unreadByAdminCount': 0, // Reset the admin's count
+      }, SetOptions(merge: true));
+    }
+  }
+
+(Part C, Step 2):
+●	initState(): This special function runs once when the screen is built. It's the perfect place to call our "mark as read" function.
+●	_markMessagesAsRead(): This function checks who is opening the chat.
+○	If it's the user (currentUser.uid == widget.chatRoomId), it sets unreadByUserCount to 0.
+○	If it's the admin, it sets unreadByAdminCount to 0.
+●	SetOptions(merge: true): This is crucial. It creates the chats document if it doesn't exist yet, or just updates the unread field if it does. This fixes the "invisible document" bug.
+lib/screens/chat_screen.dart - Part 3: "_sendMessage" Logic
+This is the most important function. It will save the message and increment the other person's unread counter.
+ // ... (inside _ChatScreenState)
+
+  Future<void> _sendMessage() async {
+    if (_messageController.text.trim().isEmpty) return;
+
+    final User? currentUser = _auth.currentUser;
+    if (currentUser == null) return;
+
+    final String messageText = _messageController.text.trim();
+    _messageController.clear();
+    
+    final timestamp = FieldValue.serverTimestamp();
+
+    try {
+      // --- TASK 1: Save the message ---
+      // (This is standard: save to the 'messages' subcollection)
+      await _firestore
+          .collection('chats')
+          .doc(widget.chatRoomId)   // This is the USER's ID
+          .collection('messages') // The subcollection
+          .add({                    // Add a new message document
+        'text': messageText,
+        'createdAt': timestamp,
+        'senderId': currentUser.uid,
+        'senderEmail': currentUser.email,
+      });
+
+      // --- TASK 2: Update the Parent Doc & Unread Counts ---
+      Map<String, dynamic> parentDocData = {
+        'lastMessage': messageText,
+        'lastMessageAt': timestamp,
+      };
+      
+      // 1. If I am the USER sending:
+      if (currentUser.uid == widget.chatRoomId) {
+        parentDocData['userEmail'] = currentUser.email;
+        // Increment the ADMIN's unread count
+        parentDocData['unreadByAdminCount'] = FieldValue.increment(1);
+      } 
+      // 2. If I am the ADMIN sending:
+      else { 
+        // Increment the USER's unread count
+        parentDocData['unreadByUserCount'] = FieldValue.increment(1);
+      }
+
+      // 3. Use .set(merge: true) to create/update the parent doc
+      await _firestore
+          .collection('chats')
+          .doc(widget.chatRoomId)
+          .set(parentDocData, SetOptions(merge: true));
+
+      // --- TASK 3: Scroll to bottom ---
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+
+    } catch (e) {
+      print("Error sending message: $e");
+    }
+  }
+
+(Part C, Step 3):
+●	FieldValue.increment(1): This is a special Firestore command. It atomically adds 1 to a field. This is the correct way to handle counters.
+●	If the User sends, we increment the unreadByAdminCount.
+●	If the Admin sends, we increment the unreadByUserCount.
+●	We removed the "bell" notification logic, as you requested. The notification is now the badge count.
+lib/screens/chat_screen.dart - Part 4: The build Method (UI)
+This part builds the list of messages and the text box.
+ @override
+  Widget build(BuildContext context) {
+    final User? currentUser = _auth.currentUser;
+
+    return Scaffold(
+      appBar: AppBar(
+        // Show "Chat with [User Email]" for admin, or "Contact Admin" for user
+        title: Text(widget.userName ?? 'Contact Admin'),
+      ),
+      body: Column(
+        children: [
+          // --- The Message List ---
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              // Query the 'messages' subcollection
+              stream: _firestore
+                  .collection('chats')
+                  .doc(widget.chatRoomId)
+                  .collection('messages')
+                  .orderBy('createdAt', descending: false) // Oldest first
+                  .snapshots(),
+              
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}\n\n(Have you created the Firestore Index?)'));
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('Say hello!'));
+                }
+                
+                final messages = snapshot.data!.docs;
+                
+                return ListView.builder(
+                  controller: _scrollController,
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final messageData = messages[index].data() as Map<String, dynamic>;
+                    return ChatBubble(
+                      message: messageData['text'] ?? '',
+                      // Check if sender is the current user
+                      isCurrentUser: messageData['senderId'] == currentUser!.uid,
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+
+          // --- The Text Input Field ---
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: const InputDecoration(
+                      hintText: 'Type your message...',
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (value) => _sendMessage(),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.send),
+                  onPressed: _sendMessage,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+Part D: Update home_screen.dart (User-side Badge)
+Now, we'll make the "Contact Admin" button show the unread count.
+lib/screens/home_screen.dart - (Updates)
+1. Add the Import
+import 'package:ecommerce_app/screens/chat_screen.dart';
+
+class _HomeScreenState extends State<HomeScreen> {
+// 1. Add state variable for the role
+  String _userRole = 'user'; // Default to 'user'
+  // 2. Get the current user
+  final User? _currentUser = FirebaseAuth.instance.currentUser;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+2. Replace the floatingActionButton Find the floatingActionButton property in your 
+Scaffold and replace it with this new StreamBuilder version.
+
+ // ... (inside _HomeScreenState)
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar( /* ... */ ),
+      body: StreamBuilder<QuerySnapshot>( /* ... */ ),
+      
+      // 1. --- REPLACE YOUR 'floatingActionButton:' ---
+      floatingActionButton: _userRole == 'user'
+          ? StreamBuilder<DocumentSnapshot>( // 2. A new StreamBuilder
+              // 3. Listen to *this user's* chat document
+              stream: _firestore.collection('chats').doc(_currentUser!.uid).snapshots(),
+              builder: (context, snapshot) {
+                
+                int unreadCount = 0;
+                // 4. Check if the doc exists and has our count field
+                if (snapshot.hasData && snapshot.data!.exists) {
+                  // Ensure data is not null before casting
+                  final data = snapshot.data!.data();
+                  if (data != null) {
+                    unreadCount = (data as Map<String, dynamic>)['unreadByUserCount'] ?? 0;
+                  }
+                }
+       
+                // 5. --- THE FIX for "trailing not defined" ---
+                //    We wrap the FAB in the Badge widget
+                return Badge(
+                  // 6. Show the count in the badge
+                  label: Text('$unreadCount'),
+                  // 7. Only show the badge if the count is > 0
+                  isLabelVisible: unreadCount > 0,
+                  // 8. The FAB is now the *child* of the Badge
+                  child: FloatingActionButton.extended(
+                    icon: const Icon(Icons.support_agent),
+                    label: const Text('Contact Admin'),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => ChatScreen(
+                            chatRoomId: _currentUser!.uid,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+                // --- END OF FIX ---
+              },
+            )
+          : null, // 9. If admin, don't show the FAB
+    );
+  }
+}
+
+(Part D):
+●	We've wrapped our FloatingActionButton in a StreamBuilder.
+●	stream: ...doc(_currentUser!.uid).snapshots(): This stream listens only to the user's specific chat document (chats/{USER_ID}).
+●	unreadCount = ...['unreadByUserCount'] ?? 0: We get the unread count for the user.
+●	Badge(...): This is the UI magic. If the count is over 0, we show a Badge with the number. This replaces the old, buggy trailing: code.
+
+Part E: Add Navigation & Badges (Admin-side)
+Let's create the screen for the admin to see all the chats.
+Step 1: Create admin_chat_list_screen.dart (New File)
+●	In lib/screens, create a new file: admin_chat_list_screen.dart.
+
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ecommerce_app/screens/chat_screen.dart';
+import 'package:flutter/material.dart';
+
+class AdminChatListScreen extends StatelessWidget {
+  const AdminChatListScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Active Chats'),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        // 1. Query all chats, sorted by last message
+        stream: FirebaseFirestore.instance
+            .collection('chats')
+            .orderBy('lastMessageAt', descending: true)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error} \n\n (Have you created the Firestore Index?)'));
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('No active chats.'));
+          }
+
+          final chatDocs = snapshot.data!.docs;
+          return ListView.builder(
+            itemCount: chatDocs.length,
+            itemBuilder: (context, index) {
+              final chatDoc = chatDocs[index];
+              final chatData = chatDoc.data() as Map<String, dynamic>;
+              
+              final String userId = chatDoc.id;
+              final String userEmail = chatData['userEmail'] ?? 'User ID: $userId';
+              final String lastMessage = chatData['lastMessage'] ?? '...';
+              
+              // 2. --- NEW: Get the admin's unread count ---
+              final int unreadCount = chatData['unreadByAdminCount'] ?? 0;
+
+              return ListTile(
+                leading: const Icon(Icons.person),
+                title: Text(userEmail, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                  lastMessage, 
+                  maxLines: 1, 
+                  overflow: TextOverflow.ellipsis,
+                ),
+                
+                // 3. --- NEW: Show a Badge on the trailing icon ---
+                trailing: unreadCount > 0
+                    ? Badge(
+                        label: Text('$unreadCount'),
+                        child: const Icon(Icons.arrow_forward_ios),
+                      )
+                    : const Icon(Icons.arrow_forward_ios),
+                
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(
+                        chatRoomId: userId,
+                        userName: userEmail,
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+
+(Part E, Step 1):
+●	stream: ...: This query gets all documents from the chats collection and sorts them by the most recent message.
+●	unreadCount = chatData['unreadByAdminCount'] ?? 0: We read the unreadByAdminCount from the chat document.
+●	trailing: unreadCount > 0 ? Badge(...) : ...: We use the same Badge logic. If this user has unread messages, the admin will see a number badge on that user's list item.
+Step 2: Add Button to admin_panel_screen.dart Add a button to the admin panel to open this new chat list.
+lib/screens/admin_panel_screen.dart - (Updates)
+// 1. ADD THIS IMPORT
+import 'package:ecommerce_app/screens/admin_chat_list_screen.dart';
+// ... (other imports)
+
+class _AdminPanelScreenState extends State<AdminPanelScreen> {
+  // ... (build method)
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Admin Panel')),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              
+              // 2. Your "Manage All Orders" button
+              ElevatedButton.icon(
+                // ... (onPressed is the same)
+              ),
+
+              // 3. --- ADD THIS NEW BUTTON ---
+              const SizedBox(height: 10),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.chat_bubble_outline),
+                label: const Text('View User Chats'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                ),
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const AdminChatListScreen(),
+                    ),
+                  );
+                },
+              ),
+              // --- END OF NEW BUTTON ---
+              const Divider(height: 30, thickness: 1),
+              // ... (rest of your "Add Product" form)
+
+
+Part F: Create Required Firestore Indexes
+You now have two queries that require a Single-Field Index exemption.
+1.	Go to your Firebase Console -> Firestore Database -> "Indexes" tab.
+2.	Click the "Single-field" tab (next to "Composite").
+3.	Click "Add exemption".
+4.	Fill it out for your messages subcollection:
+○	Collection ID: messages
+○	Field Path: createdAt
+○	Indexing: Check both "Ascending" and "Descending".
+○	Click "Save".
+5.	Click "Add exemption" again.
+6.	Fill it out for your main chats collection:
+○	Collection ID: chats
+○	Field Path: lastMessageAt
+○	Indexing: Check both "Ascending" and "Descending".
+○	Click "Save".
+Wait 5-10 minutes for these to finish "Building" and become "Enabled".
+
+Expected Output
+1.	Full Restart your app.
+2.	Log in as your Admin. Go to your Profile screen. Tap "Log Out." You will be correctly redirected to the Login Screen. (Logout Bug FIXED).
+3.	Log in as a User. You will see a "Contact Admin" button.
+4.	Tap it and send a message ("Hello admin!").
+5.	Log out. Log in as Admin.
+6.	Go to "View User Chats". You will see the chat in the list, and it will have a badge with "1" on it.
+7.	Tap the chat. The badge on the list will disappear (because _markMessagesAsRead set unreadByAdminCount to 0).
+8.	Send a reply ("Hi user!").
+9.	Log out. Log in as User.
+10.	The "Contact Admin" button will now have a "1" badge on it.
+11.	Tap the button. The chat screen opens, and the badge on the FAB disappears (because _markMessagesAsRead set unreadByUserCount to 0). You will see the admin's reply.
+
+

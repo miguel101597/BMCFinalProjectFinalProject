@@ -1,0 +1,360 @@
+In this module, we'll insert a dedicated payment step into our checkout flow. Instead of placing the order directly from the CartScreen, the user will first be sent to a PaymentScreen.
+This new screen will:
+1.	Show the final Total Price (which includes VAT).
+2.	Let the user select a mock payment method (like GCash or Bank Transfer).
+3.	Simulate a payment process with a 3-second delay.
+4.	After the "payment" succeeds, it will call our placeOrder() and clearCart() functions.
+5.	Navigate to the "Order Success" screen.
+This is a great refactor because it separates "managing a cart" from "processing a payment."
+
+Part A: Create the PaymentScreen (Logic)
+First, let's create the new screen file and build its logic.
+Step 1: Create the new file
+●	In your lib/screens folder, create a new file: payment_screen.dart.
+Step 2: Build the PaymentScreen (State & Logic)
+This will be a StatefulWidget to keep track of which payment method is selected and the _isLoading state for the "Pay Now" button.
+lib/screens/payment_screen.dart - Part 1: Imports & State Definition
+
+import 'package:ecommerce_app/providers/cart_provider.dart';
+import 'package:ecommerce_app/screens/order_success_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+// 1. An enum to represent our different payment methods
+//    This is cleaner than using strings like "gcash"
+enum PaymentMethod { card, gcash, bank }
+
+class PaymentScreen extends StatefulWidget {
+  // 2. We need to know the total amount to be paid
+  final double totalAmount;
+
+  // 3. The constructor will require this amount
+  const PaymentScreen({super.key, required this.totalAmount});
+
+  @override
+  State<PaymentScreen> createState() => _PaymentScreenState();
+}
+
+class _PaymentScreenState extends State<PaymentScreen> {
+  // 4. State variables to track selection and loading
+  PaymentMethod _selectedMethod = PaymentMethod.card; // Default to card
+  bool _isLoading = false;
+  
+  // The logic and UI will go here next...
+
+(Part A, Step 2):
+1.	enum PaymentMethod: An enum is a simple way to define a set of named constants. This is perfect for our payment options.
+2.	final double totalAmount: Our widget will require the total amount (VAT-inclusive) to be passed to it from the CartScreen.
+3.	_selectedMethod / _isLoading: These are our state variables. _selectedMethod will store which radio button is tapped, and _isLoading will control our "Pay Now" button's spinner.
+lib/screens/payment_screen.dart - Part 2: The _processPayment Logic
+This is the main function that runs when the user taps "Pay Now." Add this function inside your _PaymentScreenState class.
+
+ // ... (inside _PaymentScreenState)
+
+  Future<void> _processPayment() async {
+    // 1. Start loading spinner on the button
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 2. --- THIS IS OUR MOCK API CALL ---
+      //    We just wait for 3 seconds to simulate a network request
+      //    to GCash, a bank, or a credit card processor.
+      await Future.delayed(const Duration(seconds: 3));
+      
+      // 3. If the "payment" is "successful" (i.e., the 3 seconds are up),
+      //    we get the CartProvider.
+      //    (listen: false is critical for calls inside functions)
+      final cartProvider = Provider.of<CartProvider>(context, listen: false);
+
+      // 4. Call the functions we built in Module 10
+      //    This is the logic we are *moving* from the CartScreen
+      await cartProvider.placeOrder();
+      await cartProvider.clearCart();
+
+      // 5. If successful, navigate to success screen
+      //    We use pushAndRemoveUntil to clear the cart/payment screens
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const OrderSuccessScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      // 6. Handle any errors from placing the order
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to place order: $e')),
+      );
+    } finally {
+      // 7. ALWAYS stop loading, even if an error occurred
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+(Part A, Step 2):
+1.	setState(() { _isLoading = true; }): This shows our spinner.
+2.	await Future.delayed(...): This is our mock payment API call. It just pauses execution for 3 seconds to simulate a real payment process.
+3.	Provider.of...: We get our cart provider so we can call its functions.
+4.	placeOrder() / clearCart(): This is the exact same logic we used to have in CartScreen (in Module 10). We've now moved it here, so it only runs after the mock payment is successful.
+5.	Navigator.pushAndRemoveUntil: We send the user to the "Order Success" screen and clear the back-stack.
+6.	try/catch/finally: The same robust error handling to ensure the spinner always stops, even if the order fails.
+
+Part B: Create the PaymentScreen (UI)
+Now let's build the UI for the PaymentScreen.
+Step 3: The build Method
+Add the build method inside your _PaymentScreenState class.
+lib/screens/payment_screen.dart - Part 3: The build Method (UI)
+
+ @override
+  Widget build(BuildContext context) {
+    // 1. Use the Philippine Peso sign (₱)
+    //    We get the totalAmount from 'widget.totalAmount'
+    final String formattedTotal = '₱${widget.totalAmount.toStringAsFixed(2)}';
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Confirm Payment'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // 2. Show the total amount
+            Text(
+              'Total Amount:',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            Text(
+              formattedTotal,
+              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+            ),
+            const SizedBox(height: 24),
+            const Divider(),
+            
+            // 3. Payment method selection
+            Text(
+              'Select Payment Method:',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+
+            // 4. RadioListTile for Card
+            RadioListTile<PaymentMethod>(
+              title: const Text('Credit/Debit Card'),
+              secondary: const Icon(Icons.credit_card),
+              value: PaymentMethod.card,
+              groupValue: _selectedMethod,
+              onChanged: (PaymentMethod? value) {
+                setState(() {
+                  _selectedMethod = value!;
+                });
+              },
+            ),
+            
+            // 5. RadioListTile for GCash
+            RadioListTile<PaymentMethod>(
+              title: const Text('GCash'),
+              // We use a generic icon, but you could add a real logo here
+              secondary: const Icon(Icons.phone_android), 
+              value: PaymentMethod.gcash,
+              groupValue: _selectedMethod,
+              onChanged: (PaymentMethod? value) {
+                setState(() {
+                  _selectedMethod = value!;
+                });
+              },
+            ),
+            
+            // 6. RadioListTile for Bank Transfer
+            RadioListTile<PaymentMethod>(
+              title: const Text('Bank Transfer'),
+              secondary: const Icon(Icons.account_balance),
+              value: PaymentMethod.bank,
+              groupValue: _selectedMethod,
+              onChanged: (PaymentMethod? value) {
+                setState(() {
+                  _selectedMethod = value!;
+                });
+              },
+            ),
+            
+            const SizedBox(height: 32),
+
+            // 7. The "Pay Now" button
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              // 8. Disable button when loading
+              onPressed: _isLoading ? null : _processPayment,
+              child: _isLoading
+                  ? const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    )
+                  : Text('Pay Now ($formattedTotal)'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+(Part B, Step 3):
+1.	formattedTotal: We get the totalAmount from widget.totalAmount (which is our new VAT-inclusive total) and format it with the "₱" sign.
+2.	RadioListTile: This is a new widget for your students. It's perfect for this. It provides a row with a title, an icon, and a selectable radio button.
+3.	value: The unique enum value for this option.
+4.	groupValue: _selectedMethod: This tells all the radio buttons which option is currently selected.
+5.	onChanged: (val) => setState(...): When the user taps a new option, we update our _selectedMethod state. This causes the UI to rebuild and show the new selection.
+6.	"Pay Now" Button: This is the same spinner/text button we've used before. It's disabled if _isLoading is true, and it calls our _processPayment function.
+
+Part C: Refactor cart_screen.dart
+Now, we must simplify CartScreen. We'll remove the StatefulWidget conversion and all the order logic we just moved.
+Step 4: Replace the entire lib/screens/cart_screen.dart file
+This new version is simpler. It's just a StatelessWidget that navigates to our PaymentScreen.
+
+import 'package:ecommerce_app/providers/cart_provider.dart';
+import 'package:ecommerce_app/screens/payment_screen.dart'; // 1. Import PaymentScreen
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+// 2. It's a StatelessWidget again!
+class CartScreen extends StatelessWidget {
+  const CartScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // 3. We listen: true, so the list and total update
+    final cart = Provider.of<CartProvider>(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Your Cart'),
+      ),
+      body: Column(
+        children: [
+          // 4. The ListView is the same as before
+          Expanded(
+            child: cart.items.isEmpty
+                ? const Center(child: Text('Your cart is empty.'))
+                : ListView.builder(
+                    itemCount: cart.items.length,
+                    itemBuilder: (context, index) {
+                      final cartItem = cart.items[index];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          child: Text(cartItem.name[0]),
+                        ),
+                        title: Text(cartItem.name),
+                        subtitle: Text('Qty: ${cartItem.quantity}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                                '₱${(cartItem.price * cartItem.quantity).toStringAsFixed(2)}'),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.red),
+                              onPressed: () {
+                                cart.removeItem(cartItem.id);
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          
+          // 5. --- THIS IS OUR NEW PRICE BREAKDOWN CARD (from Module 15) ---
+          Card(
+            margin: const EdgeInsets.all(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Subtotal:', style: TextStyle(fontSize: 16)),
+                      Text('₱${cart.subtotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('VAT (12%):', style: TextStyle(fontSize: 16)),
+                      Text('₱${cart.vat.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16)),
+                    ],
+                  ),
+                  const Divider(height: 20, thickness: 1),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Total:', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text(
+                        '₱${cart.totalPriceWithVat.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          
+          // 6. --- THIS IS THE MODIFIED BUTTON ---
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size.fromHeight(50),
+              ),
+              // 7. Disable if cart is empty, otherwise navigate
+              onPressed: cart.items.isEmpty ? null : () {
+                // 8. Navigate to our new PaymentScreen
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => PaymentScreen(
+                      // 9. Pass the final VAT-inclusive total
+                      totalAmount: cart.totalPriceWithVat,
+                    ),
+                  ),
+                );
+              },
+              // 10. No more spinner!
+              child: const Text('Proceed to Payment'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+(Part C):
+1.	Back to StatelessWidget: We removed _isLoading and the State class (from Module 10), so this widget is simple again.
+2.	onPressed (Button): This logic is now much simpler. It just checks if the cart is empty and then navigates to the PaymentScreen.
+3.	totalAmount: cart.totalPriceWithVat: We pass the final VAT-inclusive total price to the PaymentScreen's constructor.
+4.	The placeOrder logic and _isLoading state are completely gone from this file.
+
+Expected Output
+1.	Full Restart your app.
+2.	Add items to your cart.
+3.	Go to the Cart Screen. You will see the full price breakdown (Subtotal, VAT, Total).
+4.	Tap the "Proceed to Payment" button.
+5.	You will be navigated to the new Payment Screen. You should see the final Total Price (e.g., "₱112.00").
+6.	The "Credit/Debit Card" option will be selected by default.
+7.	Tap on "GCash". The radio button selection will update.
+8.	Tap the "Pay Now" button.
+9.	The button will become disabled and show a loading spinner for 3 seconds (our mock API call).
+10.	After 3 seconds, you will be navigated to the "Order Placed!" screen.
+11.	Tap "Continue Shopping". You'll go to the Home Screen, and your cart badge will be gone.
+12.	Go to your Admin Order Management screen. You will see the new order listed with the status "Pending".
+

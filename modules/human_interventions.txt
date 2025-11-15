@@ -1,0 +1,46 @@
+Human Interventions Required for Modules 1 and 2
+
+Based on modules 1 and 2, the human interventions required are:
+
+Module 1:
+- Install Flutter 3.32.5: Download and extract SDK, add to PATH.
+- Set up editor: Install Android Studio, Flutter/Dart extensions, run flutter doctor and resolve issues.
+- Create project: Run `flutter create ecommerce_app`.
+- Install CLIs: Run `npm install -g firebase-tools` and `dart pub global activate flutterfire_cli` (with troubleshooting for PowerShell/git issues).
+- Log in to Firebase: Run `firebase login` and authenticate in browser.
+- Configure Firebase: Run `flutterfire configure`, create project, select android/web platforms.
+- Add package: Run `flutter pub add firebase_core`.
+
+Module 2:
+- Create logo: Design or download 1024x1024 PNG for app icon.
+- Generate icons: Use online tool (e.g., App Icon Generator), upload logo, select Android, download zip.
+- Replace icons: Unzip and copy mipmap folders to android/app/src/main/res/.
+- Add splash image: Place 1200x1200 PNG in assets/images/splash_logo.png.
+- Generate splash: Run `dart run flutter_native_splash:create`.
+- Rebuild app: Run `flutter run` for fresh build to see icon/splash changes.
+
+Module 3:
+- Create file structure: Manually create lib/screens/ folder and login_screen.dart/signup_screen.dart files.
+- Update main.dart: Add import for login_screen.dart and change home to LoginScreen.
+- Implement login_screen.dart: Write the StatefulWidget code with Form, TextFormFields, validators, ElevatedButton (with print logic), and TextButton navigation.
+- Implement signup_screen.dart: Copy login_screen.dart code, modify imports, class names, AppBar title, button text, and navigation to LoginScreen.
+- Test: Run `flutter run` to verify UI, validation, and navigation between screens.
+
+Module 4:
+- Add package: Run `flutter pub add firebase_auth`.
+- Enable authentication: Manually log into Firebase Console, open the project, go to Authentication > Sign-in method, enable Email/Password, and save.
+
+Module 5:
+- Add package: Run `flutter pub add cloud_firestore`.
+- Enable Firestore: Manually log into Firebase Console, go to Firestore Database → Create database in test mode.
+- Sign up: Run the app, sign up with your email to create a user document in Firestore.
+- Set admin role: In Firestore Console, edit your user document in 'users' collection, change 'role' from 'user' to 'admin'.
+- Test: Run `flutter run` to verify admin button appears for admin users, product upload form works, and data saves to Firestore.
+
+Module 11:
+- Create composite index: If order history query fails, manually create composite index in Firebase Console under Indexes for collection 'orders', fields userId (ascending) and createdAt (descending).
+
+Module 12.5:
+- Create composite index: Same as Module 11, for orders query (userId ascending, createdAt descending). Trigger on "My Orders" screen error, create via link in debug console or manually in Firebase Console.
+
+These are manual steps outside code implementation.

@@ -1,0 +1,236 @@
+Right now, our "Add to Cart" button just adds a quantity of 1. We'll fix this by adding a quantity selector (+ / - buttons) to the ProductDetailScreen. This will allow a user to add 5, 10, or any number of an item to their cart at once.
+Part A: Update cart_provider.dart (The "Brain")
+First, let's update the "brain" of our cart. We need to teach the addItem function how to accept a quantity parameter.
+lib/providers/cart_provider.dart - Part 1: CartItem Model (Already Correct!)
+The good news is, we already prepared for this! Our CartItem class (from Module 9) already has a quantity field. We don't need to change it at all.
+
+class CartItem {
+  // ...
+  int quantity; // This already exists!
+  // ...
+}
+
+lib/providers/cart_provider.dart - Part 2: The addItem Function
+We will modify the addItem function to accept a new quantity argument.
+
+ // ... (inside CartProvider class)
+
+  // 1. THIS IS THE OLD FUNCTION:
+  // void addItem(String id, String name, double price) { ... }
+
+  // 2. THIS IS THE NEW, UPDATED FUNCTION:
+  void addItem(String id, String name, double price, int quantity) {
+    // 3. Check if the item is already in the cart
+    var index = _items.indexWhere((item) => item.id == id);
+
+    if (index != -1) {
+      // 4. If YES: Add the new quantity to the existing quantity
+      _items[index].quantity += quantity;
+    } else {
+      // 5. If NO: Add the item with the specified quantity
+      _items.add(CartItem(
+        id: id,
+        name: name,
+        price: price,
+        quantity: quantity, // Use the quantity from the parameter
+      ));
+    }
+
+    _saveCart(); // This is the same
+    notifyListeners(); // This is the same
+  }
+
+  // ... (removeItem and all other functions are unchanged)
+
+(Part A):
+●	void addItem(..., int quantity): We added the new quantity parameter.
+●	_items[index].quantity += quantity;: This is the key logic. If the user adds 5, and they already have 2 in the cart, their new total will be 7.
+●	CartItem(..., quantity: quantity): If it's a new item, we create it using the quantity the user selected (e.g., 5).
+
+Part B: Update product_detail_screen.dart (The UI)
+Now, let's add the + and - buttons to our ProductDetailScreen. This means we must convert it to a StatefulWidget to store the currently selected quantity.
+lib/screens/product_detail_screen.dart - Part 1: Convert to StatefulWidget
+Change the class definitions at the top of the file.
+
+// ... (imports)
+
+// 1. Change StatelessWidget to StatefulWidget
+class ProductDetailScreen extends StatefulWidget {
+  
+  final Map<String, dynamic> productData;
+  final String productId;
+
+  const ProductDetailScreen({
+    super.key,
+    required this.productData,
+    required this.productId,
+  });
+
+  @override
+  // 2. Create the State class
+  State<ProductDetailScreen> createState() => _ProductDetailScreenState();
+}
+
+// 3. Rename the main class to _ProductDetailScreenState and extend State
+class _ProductDetailScreenState extends State<ProductDetailScreen> {
+  
+  // 4. ADD OUR NEW STATE VARIABLE FOR QUANTITY
+  int _quantity = 1;
+
+  // 5. The build method will go inside here
+  @override
+  Widget build(BuildContext context) {
+    // ... (build method logic)
+  }
+}
+
+(Part B, Step 1):
+●	We converted the widget to StatefulWidget so we can have state variables.
+●	int _quantity = 1;: This is our new state variable. It will hold the number shown between the + and - buttons. It always starts at 1.
+lib/screens/product_detail_screen.dart - Part 2: Add Helper Functions
+Let's add the functions to change the quantity. Add these inside your _ProductDetailScreenState class.
+
+ // ... (inside _ProductDetailScreenState)
+
+  // 1. ADD THIS FUNCTION
+  void _incrementQuantity() {
+    setState(() {
+      _quantity++;
+    });
+  }
+
+  // 2. ADD THIS FUNCTION
+  void _decrementQuantity() {
+    // We don't want to go below 1
+    if (_quantity > 1) {
+      setState(() {
+        _quantity--;
+      });
+    }
+  }
+
+(Part B, Step 2):
+●	_incrementQuantity(): A simple function that adds 1 to _quantity and calls setState to rebuild the UI.
+●	_decrementQuantity(): Does the same, but first checks that _quantity is greater than 1 so we can't have 0 or negative items.
+lib/screens/product_detail_screen.dart - Part 3: Update the build Method (UI)
+Now we'll modify the build method to access our data and add the new widgets.
+
+ @override
+  Widget build(BuildContext context) {
+    
+    // 1. We now access productData using 'widget.'
+    final String name = widget.productData['name'];
+    final String description = widget.productData['description'];
+    final String imageUrl = widget.productData['imageUrl'];
+    final double price = widget.productData['price'];
+
+    // 2. Get the CartProvider (same as before)
+    final cart = Provider.of<CartProvider>(context, listen: false);
+
+    return Scaffold(
+      // ... (AppBar is the same)
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // ... (Image, Padding, Name, Price, Divider, Description... all the same)
+
+            // 3. Find the "Padding" widget that holds your "Add to Cart" button
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ... (Name, Price, Divider, Description... all the same)
+
+                  // 4. --- ADD THIS NEW SECTION ---
+                  //    (before the "Add to Cart" button)
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // 5. DECREMENT BUTTON
+                      IconButton.filledTonal(
+                        icon: const Icon(Icons.remove),
+                        onPressed: _decrementQuantity,
+                      ),
+                      
+                      // 6. QUANTITY DISPLAY
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Text(
+                          '$_quantity', // 7. Display our state variable
+                          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      
+                      // 8. INCREMENT BUTTON
+                      IconButton.filled(
+                        icon: const Icon(Icons.add),
+                        onPressed: _incrementQuantity,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  // --- END OF NEW SECTION ---
+
+
+                  // 9. Find your "Add to Cart" button
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      // 10. --- THIS IS THE UPDATED LOGIC ---
+                      //    We now pass the _quantity from our state
+                      cart.addItem(
+                        widget.productId,
+                        name,
+                        price,
+                        _quantity, // 11. Pass the selected quantity
+                      );
+
+                      // 12. Update the SnackBar message
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Added $_quantity x $name to cart!'),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.shopping_cart_outlined),
+                    label: const Text('Add to Cart'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      textStyle: const TextStyle(fontSize: 18),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+(Part B, Step 3):
+1.	widget.productData: Because we are in a StatefulWidget, we must access the original parameters (like productData) by using widget..
+2.	Row(...): We add a new Row to hold our + / - buttons horizontally.
+3.	IconButton.filledTonal: A nice-looking "less important" button for the - icon.
+4.	IconButton.filled: A standard filled button for the + icon, making it the primary action.
+5.	Text('$_quantity'): This is the key. The Text widget displays our _quantity state variable. When setState is called, this Text rebuilds.
+6.	cart.addItem(...): We update the onPressed handler to call our new addItem function, passing in the _quantity from our state.
+7.	SnackBar: We update the message to be more descriptive (e.g., "Added 5 x Spanish Latte to cart!").
+
+Expected Output
+1.	Full Restart your app.
+2.	Log in and navigate to any Product Detail Screen.
+3.	You will now see a quantity selector (a -, a "1", and a +) above the "Add to Cart" button.
+4.	Tap the + button. The number will change to "2".
+5.	Tap + again. The number will change to "3".
+6.	Tap the - button. The number will change to "2".
+7.	Tap - again. The number will change to "1".
+8.	Tap - one more time. The number will stay at "1" (because of our if (_quantity > 1) check).
+9.	Set the quantity to "3".
+10.	Tap the "Add to Cart" button.
+11.	A SnackBar will appear saying: "Added 3 x [Product Name] to cart!"
+12.	Go back to the HomeScreen. The cart badge in the AppBar will show a "3".
+13.	Go to the Cart Screen. You will see your product listed with "Qty: 3" and the correct total price (e.g., ₱100.00 x 3 = ₱300.00).
+
